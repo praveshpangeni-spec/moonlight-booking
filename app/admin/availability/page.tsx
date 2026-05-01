@@ -46,7 +46,7 @@ export default function AvailabilityPage() {
     const { error: err } = await supabase.from("availability").insert({
       date: newDate, start_time: newStart, end_time: newEnd,
       is_blocked: false, note: newNote || null,
-    });
+    } as never);
     if (err) setError(err.message);
     else { setNewNote(""); load(); }
     setSaving(false);
