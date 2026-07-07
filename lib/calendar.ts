@@ -9,6 +9,7 @@ export function addToCalendar(payload: {
   service?: string;
   notes?: string;
   paymentStatus?: string; // "paid" | "unpaid"
+  businessId?: string;    // multi-tenant: which business's calendar
 }): void {
   try {
     fetch("/api/calendar/event", {
@@ -39,8 +40,9 @@ function post(payload: Record<string, unknown>): void {
 // Flip a booking's existing calendar event title to "Paid" (matched by name + start time).
 export function markCalendarPaid(payload: {
   name: string;
-  date: string;      // Toronto yyyy-MM-dd
-  startTime: string; // Toronto HH:MM
+  date: string;      // stored yyyy-MM-dd (business tz)
+  startTime: string; // stored HH:MM (business tz)
+  businessId?: string;
 }): void {
   post({ action: "mark-paid", ...payload });
 }
@@ -50,6 +52,7 @@ export function deleteCalendarEvent(payload: {
   name: string;
   date: string;
   startTime: string;
+  businessId?: string;
 }): void {
   post({ action: "delete", ...payload });
 }
@@ -64,6 +67,7 @@ export function updateCalendarEvent(payload: {
   startTime: string;       // new Toronto HH:MM
   durationMinutes: number;
   paymentStatus?: string;  // "paid" | "unpaid"
+  businessId?: string;
 }): void {
   post({ action: "update", ...payload });
 }

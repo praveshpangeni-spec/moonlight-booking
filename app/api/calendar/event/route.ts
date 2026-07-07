@@ -16,9 +16,31 @@ import crypto from "crypto";
 
 const SA_EMAIL = process.env.GOOGLE_SA_EMAIL;
 const SA_KEY = process.env.GOOGLE_SA_PRIVATE_KEY;
-const CAL_ID = process.env.GOOGLE_CALENDAR_ID;
-const EVENT_TZ = "America/Toronto"; // bookings are stored in Toronto time
-const CAL_BASE = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CAL_ID || "")}/events`;
+const CAL_ID = process.env.GOOGLE_CALENDAR_ID; // fallback (Moonlight)
+const DEFAULT_EVENT_TZ = "America/Toronto";    // fallback storage tz (Moonlight)
+
+// Per-business calendar: look up google_calendar_id + timezone by businessId.
+// business_settings/businesses have public-read RLS, so the anon key suffices.
+async function resolveBusiness(businessId?: string): Promise<{ calId: string | null; tz: string }> {
+  if (!businessId) return { calId: CAL_ID || null, tz: DEFAULT_EVENT_TZ };
+  try {
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const h = { apikey: anon!, Authorization: `Bearer ${anon}` };
+    const [sRes, bRes] = await Promise.all([
+      fetch(`${base}/rest/v1/business_settings?business_id=eq.${businessId}&select=google_calendar_id`, { headers: h }),
+      fetch(`${base}/rest/v1/businesses?id=eq.${businessId}&select=timezone`, { headers: h }),
+    ]);
+    const s = (await sRes.json())?.[0];
+    const b = (await bRes.json())?.[0];
+    return { calId: s?.google_calendar_id || CAL_ID || null, tz: b?.timezone || DEFAULT_EVENT_TZ };
+  } catch {
+    return { calId: CAL_ID || null, tz: DEFAULT_EVENT_TZ };
+  }
+}
+
+const calBase = (calId: string) =>
+  `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`;
 
 function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -71,13 +93,13 @@ function computeTimes(date: string, startTime: string, durationMinutes?: number)
   return { startDateTime, endDateTime };
 }
 
-// Find the booking's calendar event by name + exact start time (Toronto local).
-async function findEvent(token: string, name: string, date: string, startTime: string): Promise<any | null> {
+// Find the booking's calendar event by name + exact start time (business local).
+async function findEvent(base: string, token: string, name: string, date: string, startTime: string): Promise<any | null> {
   const [hh, mm] = String(startTime).split(":").map(Number);
   const localStart = `${date}T${pad(hh)}:${pad(mm)}:00`;
   const lo = new Date(`${date}T00:00:00Z`); lo.setUTCDate(lo.getUTCDate() - 1);
   const hi = new Date(`${date}T00:00:00Z`); hi.setUTCDate(hi.getUTCDate() + 2);
-  const listUrl = `${CAL_BASE}?` + new URLSearchParams({
+  const listUrl = `${base}?` + new URLSearchParams({
     q: name || "",
     timeMin: lo.toISOString(),
     timeMax: hi.toISOString(),
@@ -92,20 +114,24 @@ async function findEvent(token: string, name: string, date: string, startTime: s
 }
 
 export async function POST(req: Request) {
-  if (!SA_EMAIL || !SA_KEY || !CAL_ID) {
+  if (!SA_EMAIL || !SA_KEY) {
     return NextResponse.json({ skipped: true, reason: "calendar not configured" });
   }
 
   try {
     const body = await req.json();
-    const { action, name, date, startTime, durationMinutes, service, notes, paymentStatus } = body;
+    const { action, name, date, startTime, durationMinutes, service, notes, paymentStatus, businessId } = body;
     const payLabel = paymentStatus === "paid" ? "Paid" : "Unpaid";
+
+    const { calId, tz: EVENT_TZ } = await resolveBusiness(businessId);
+    if (!calId) return NextResponse.json({ skipped: true, reason: "no calendar for business" });
+    const CAL_BASE = calBase(calId);
 
     // ── mark-paid ────────────────────────────────────────────────────
     if (action === "mark-paid") {
       if (!date || !startTime) return NextResponse.json({ error: "missing date/time" }, { status: 400 });
       const token = await getAccessToken();
-      const ev = await findEvent(token, name, date, startTime);
+      const ev = await findEvent(CAL_BASE, token, name, date, startTime);
       if (!ev) return NextResponse.json({ ok: false, reason: "event not found" });
       const res = await fetch(`${CAL_BASE}/${ev.id}`, {
         method: "PATCH",
@@ -121,7 +147,7 @@ export async function POST(req: Request) {
     if (action === "delete") {
       if (!date || !startTime) return NextResponse.json({ error: "missing date/time" }, { status: 400 });
       const token = await getAccessToken();
-      const ev = await findEvent(token, name, date, startTime);
+      const ev = await findEvent(CAL_BASE, token, name, date, startTime);
       if (!ev) return NextResponse.json({ ok: false, reason: "event not found" });
       const res = await fetch(`${CAL_BASE}/${ev.id}`, {
         method: "DELETE",
@@ -140,7 +166,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "missing date/time" }, { status: 400 });
       }
       const token = await getAccessToken();
-      const ev = await findEvent(token, name, origDate, origStartTime);
+      const ev = await findEvent(CAL_BASE, token, name, origDate, origStartTime);
       if (!ev) return NextResponse.json({ ok: false, reason: "event not found" });
       const { startDateTime, endDateTime } = computeTimes(date, startTime, durationMinutes);
       const res = await fetch(`${CAL_BASE}/${ev.id}`, {

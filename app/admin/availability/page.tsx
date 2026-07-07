@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Plus, Trash2, EyeOff, Eye, Globe, RefreshCw, Repeat2 } from "lucide-react";
 import {
-  TORONTO_TZ, COMMON_TIMEZONES,
-  torontoToTz, tzToToronto,
+  COMMON_TIMEZONES, tzToTz,
   todayIn, tomorrowIn, currentTimeIn,
   fmt12, getTzAbbr,
 } from "@/lib/timezone";
+import { useBusiness } from "@/lib/business";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -40,14 +40,16 @@ function getDayOfWeek(dateStr: string): number {
 }
 
 export default function AvailabilityPage() {
-  const [adminTz, setAdminTz] = useState(TORONTO_TZ);
+  const { biz } = useBusiness();
+  const bizAbbr = getTzAbbr(biz.timezone);
+  const [adminTz, setAdminTz] = useState(biz.timezone);
   const [nowStr, setNowStr] = useState("");
 
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [newDate, setNewDate] = useState(() => tomorrowIn(TORONTO_TZ));
+  const [newDate, setNewDate] = useState(() => tomorrowIn(biz.timezone));
   const [newStart, setNewStart] = useState("10:00");
   const [newEnd, setNewEnd] = useState("17:00");
   const [newNote, setNewNote] = useState("");
@@ -81,10 +83,11 @@ export default function AvailabilityPage() {
 
   const load = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true); else setLoading(true);
-    const queryFrom = tzToToronto(todayIn(adminTz), "00:00", adminTz).date;
+    const queryFrom = tzToTz(todayIn(adminTz), "00:00", adminTz, biz.timezone).date;
     const { data } = await supabase
       .from("availability")
       .select("*")
+      .eq("business_id", biz.id)
       .gte("date", queryFrom)
       .order("date")
       .order("start_time");
@@ -136,19 +139,20 @@ export default function AvailabilityPage() {
     }
 
     // Convert each date and build records
-    const records: { date: string; start_time: string; end_time: string; is_blocked: boolean; note: string | null }[] = [];
+    const records: { business_id: string; date: string; start_time: string; end_time: string; is_blocked: boolean; note: string | null }[] = [];
     for (const date of dates) {
-      const torontoStart = tzToToronto(date, newStart, adminTz);
-      const torontoEnd   = tzToToronto(date, newEnd,   adminTz);
+      const torontoStart = tzToTz(date, newStart, adminTz, biz.timezone);
+      const torontoEnd   = tzToTz(date, newEnd,   adminTz, biz.timezone);
       if (torontoStart.date !== torontoEnd.date) {
-        setError(`Window on ${date} crosses midnight (Toronto time). Split into two windows.`);
+        setError(`Window on ${date} crosses midnight (business time). Split into two windows.`);
         return;
       }
       if (torontoStart.time >= torontoEnd.time) {
-        setError(`After converting to Toronto time on ${date}, end is not after start.`);
+        setError(`After converting to business time on ${date}, end is not after start.`);
         return;
       }
       records.push({
+        business_id: biz.id,
         date: torontoStart.date,
         start_time: torontoStart.time,
         end_time: torontoEnd.time,
@@ -177,8 +181,8 @@ export default function AvailabilityPage() {
 
   const grouped = useMemo(() =>
     slots.reduce<Record<string, DisplaySlot[]>>((acc, slot) => {
-      const { date: displayDate, time: displayStart } = torontoToTz(slot.date, slot.start_time, adminTz);
-      const { time: displayEnd } = torontoToTz(slot.date, slot.end_time, adminTz);
+      const { date: displayDate, time: displayStart } = tzToTz(slot.date, slot.start_time, biz.timezone, adminTz);
+      const { time: displayEnd } = tzToTz(slot.date, slot.end_time, biz.timezone, adminTz);
       if (!acc[displayDate]) acc[displayDate] = [];
       acc[displayDate].push({ slot, displayDate, displayStart, displayEnd });
       return acc;
@@ -191,13 +195,13 @@ export default function AvailabilityPage() {
   );
 
   const tzAbbr = getTzAbbr(adminTz);
-  const isTorontoTz = adminTz === TORONTO_TZ;
+  const isTorontoTz = adminTz === biz.timezone;
 
   const previewToronto =
     !isTorontoTz && newDate && newStart && newEnd
       ? {
-          start: tzToToronto(newDate, newStart, adminTz),
-          end:   tzToToronto(newDate, newEnd,   adminTz),
+          start: tzToTz(newDate, newStart, adminTz, biz.timezone),
+          end:   tzToTz(newDate, newEnd,   adminTz, biz.timezone),
         }
       : null;
 
@@ -242,7 +246,7 @@ export default function AvailabilityPage() {
           <Plus size={18} className="text-amber-400" /> Add Open Window
         </h2>
         <p className="text-slate-500 text-xs mb-3">
-          Enter times in <span className="text-purple-300">{tzAbbr}</span>. They will be stored as Toronto time.
+          Enter times in <span className="text-purple-300">{tzAbbr}</span>. They will be stored as business time ({bizAbbr}).
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
@@ -273,9 +277,9 @@ export default function AvailabilityPage() {
 
         {previewToronto && (
           <div className="mb-3 px-3 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-slate-400">
-            Saves as Toronto time:&nbsp;
+            Saves as business time:&nbsp;
             <span className="text-purple-300 font-mono">
-              {previewToronto.start.date} &nbsp;{fmt12(previewToronto.start.time)} &ndash; {fmt12(previewToronto.end.time)} ET
+              {previewToronto.start.date} &nbsp;{fmt12(previewToronto.start.time)} &ndash; {fmt12(previewToronto.end.time)} {bizAbbr}
             </span>
           </div>
         )}
@@ -385,7 +389,7 @@ export default function AvailabilityPage() {
                       </p>
                       {!isTorontoTz && (
                         <p className="text-slate-600 text-xs mt-0.5">
-                          {fmt12(slot.start_time)} &ndash; {fmt12(slot.end_time)} ET
+                          {fmt12(slot.start_time)} &ndash; {fmt12(slot.end_time)} {bizAbbr}
                         </p>
                       )}
                       {slot.note && <p className="text-slate-500 text-xs mt-0.5">{slot.note}</p>}

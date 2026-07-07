@@ -7,7 +7,8 @@ import { SERVICE_LABELS } from "@/lib/database.types";
 import { Clock, Wallet, RefreshCw, MessageCircle, CalendarDays } from "lucide-react";
 import { toWaNumber } from "@/lib/countries";
 import { bookingWhatsappMessage } from "@/lib/whatsapp";
-import { TORONTO_TZ, todayIn, fmt12 as tzFmt12, torontoToTz } from "@/lib/timezone";
+import { todayIn, fmt12 as tzFmt12, tzToTz, getTzAbbr } from "@/lib/timezone";
+import { useBusiness } from "@/lib/business";
 
 interface Booking {
   id: string;
@@ -37,26 +38,29 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
+  const { biz, settings } = useBusiness();
+  const bizAbbr = getTzAbbr(biz.timezone);
   const [weekBookings, setWeekBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState({ today: 0, pending: 0, unpaid: 0 });
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
-    const today = todayIn(TORONTO_TZ);
+    const today = todayIn(biz.timezone);
     const weekEnd = addDays(today, 6);
 
     const [{ data: week }, { data: pending }, { data: unpaid }] = await Promise.all([
       supabase
         .from("bookings")
         .select("*, clients(name, phone)")
+        .eq("business_id", biz.id)
         .gte("date", today)
         .lte("date", weekEnd)
         .neq("status", "cancelled")
         .order("date")
         .order("start_time"),
-      supabase.from("bookings").select("id").eq("status", "pending"),
-      supabase.from("bookings").select("id").eq("payment_status", "unpaid").neq("status", "cancelled"),
+      supabase.from("bookings").select("id").eq("business_id", biz.id).eq("status", "pending"),
+      supabase.from("bookings").select("id").eq("business_id", biz.id).eq("payment_status", "unpaid").neq("status", "cancelled"),
     ]);
 
     const all = (week as Booking[]) || [];
@@ -73,11 +77,15 @@ export default function AdminDashboard() {
 
   const wa = (b: Booking) => {
     if (!b.clients?.phone) return;
-    const msg = encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time));
+    const msg = encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time, {
+      whatsappNumber: settings.whatsapp_number,
+      template: settings.wa_template,
+      storageTz: biz.timezone,
+    }));
     window.open(`https://wa.me/${toWaNumber(b.clients.phone)}?text=${msg}`, "_blank");
   };
 
-  const today = todayIn(TORONTO_TZ);
+  const today = todayIn(biz.timezone);
 
   // Build 7-day list with labels
   const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -180,8 +188,10 @@ export default function AdminDashboard() {
                         <div key={b.id} className="flex items-center gap-2 px-3 py-3 hover:bg-white/2 transition-all">
                           {/* Time */}
                           <div className="min-w-[80px] shrink-0 leading-tight">
-                            <p className="text-white font-bold text-xs">{tzFmt12(b.start_time)} <span className="text-slate-500 font-normal">EDT</span></p>
-                            <p className="text-amber-400/80 text-[11px]">{tzFmt12(torontoToTz(b.date, b.start_time, "Asia/Kathmandu").time)} <span className="text-slate-500">NPT</span></p>
+                            <p className="text-white font-bold text-xs">{tzFmt12(b.start_time)} <span className="text-slate-500 font-normal">{bizAbbr}</span></p>
+                            {biz.timezone !== "Asia/Kathmandu" && (
+                              <p className="text-amber-400/80 text-[11px]">{tzFmt12(tzToTz(b.date, b.start_time, biz.timezone, "Asia/Kathmandu").time)} <span className="text-slate-500">NPT</span></p>
+                            )}
                             <p className="text-slate-600 text-[11px]">{b.duration_minutes} min</p>
                           </div>
 

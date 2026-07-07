@@ -183,3 +183,45 @@ Reuse the existing service-account integration with **no new OAuth work**:
   `business_id` columns get `DEFAULT <moonlight id>` so the live app's inserts
   keep working untouched and are auto-tagged. Existing RLS policies unchanged;
   tenant-scoped policies land at switchover. Code work on branch `multi-tenant`.
+- **Phase 1 COMPLETE 2026-07-07.**
+  - Pre-migration backup: `../backup-2026-07-07/{clients,bookings,availability}.json`.
+  - Created `businesses` / `business_users` / `business_settings` / `services`;
+    RLS enabled on these four (public read of active businesses/services/settings;
+    owner-scoped writes). Existing 3 tables' RLS untouched.
+  - Moonlight business id = `c7f1e290-5e1a-4b8e-9d3a-2f6b8c4d0a01`
+    (slug `moonlight`, tz America/Toronto, active, plan flat).
+  - `business_id` added to clients/availability/bookings with Moonlight DEFAULT;
+    backfill verified (4/3/82 rows tagged). Owner login linked. Settings + 2
+    services seeded from the previously hardcoded values.
+  - Verified live flows as anon: availability read ✔, client insert ✔ (201),
+    booking insert ✔ (201), auto-tagging ✔.
+  - **Bug found & hotfixed during verification:** the customer flow's client
+    insert used `.insert().select()` — RETURNING requires anon SELECT, which
+    RLS (pre-existing, unchanged) denies → customer web bookings were silently
+    lost while showing success. Fixed in `PaymentStep.tsx` (client-generated
+    uuid + `get_client_id_by_phone` SECURITY DEFINER RPC for duplicate phones);
+    deployed to production same day.
+  - Git: master = production baseline (`d9d5c39`), branch `multi-tenant`
+    created and pushed for Phase 2+ code work.
+- **Phase 2 COMPLETE 2026-07-07** (branch `multi-tenant`, NOT deployed).
+  - `lib/business.tsx`: BusinessProvider + useBusiness() — resolves the owner's
+    business via business_users, loads settings + services, blocks suspended
+    businesses (admin offline). Wired into `app/admin/layout.tsx`.
+  - All 5 admin pages tenant-scoped (`.eq("business_id", biz.id)` on every
+    query, `business_id` on every insert) and generalized to `biz.timezone`
+    (Toronto no longer hardcoded; NPT secondary times hidden for Nepal-tz
+    businesses). Services/prices/durations come from the `services` table
+    (SERVICE_LABELS kept as fallback); WhatsApp number/template from
+    `business_settings` (`{name} {date} {day} {time} {number}` placeholders);
+    calendar route resolves `google_calendar_id` + event tz per business
+    (env fallback for Moonlight).
+  - `lib/timezone.ts`: new generic `tzToTz()`; Toronto helpers now wrappers.
+  - **DB (applied live, verified safe):** replaced the `Admin full access`
+    (`true`) policies on clients/availability/bookings with tenant-scoped
+    `tenant_*` policies (authenticated access only to rows of businesses the
+    user is mapped to). Live app unaffected: owner mapped → sees Moonlight
+    rows; inserts get Moonlight DEFAULT. Anon policies untouched (re-verified
+    read 200 / insert 201 after the swap).
+  - Remaining: Phase 3 `/b/[slug]` public page (public booking is still the
+    single-tenant `/` reading Moonlight via defaults), Phase 4 super-admin,
+    Phase 5 Stripe.

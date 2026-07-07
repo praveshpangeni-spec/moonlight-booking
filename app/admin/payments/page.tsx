@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subWeeks, subMonths } from "date-fns";
 import { SERVICE_LABELS } from "@/lib/database.types";
 import { Wallet, TrendingUp, Clock, CheckCircle, Search } from "lucide-react";
+import { useBusiness } from "@/lib/business";
 
 type Range = "this_week" | "last_week" | "this_month" | "last_month" | "all";
 
@@ -57,6 +58,7 @@ function getDateRange(range: Range): { from: string; to: string } | null {
 }
 
 export default function PaymentsPage() {
+  const { biz } = useBusiness();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [range, setRange] = useState<Range>("this_month");
   const [search, setSearch] = useState("");
@@ -67,6 +69,7 @@ export default function PaymentsPage() {
     let q = supabase
       .from("bookings")
       .select("id, date, start_time, amount, service_type, payment_status, payment_method, payment_reference, status, clients(name, phone)")
+      .eq("business_id", biz.id)
       .neq("status", "cancelled")
       .order("date", { ascending: false })
       .order("start_time", { ascending: false });

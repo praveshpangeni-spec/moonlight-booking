@@ -1,8 +1,14 @@
-import { torontoToTz } from "@/lib/timezone";
+import { tzToTz, TORONTO_TZ } from "@/lib/timezone";
 
-// Admin/business WhatsApp number shown to clients.
-const ADMIN_WA = "+1 (437) 898-4606";
+// Fallbacks for the default (Moonlight) business when no settings are passed.
+const DEFAULT_WA = "+1 (437) 898-4606";
 const NEPAL_TZ = "Asia/Kathmandu";
+
+export interface WaOptions {
+  whatsappNumber?: string | null; // business's WhatsApp number
+  template?: string | null;       // custom template with {name} {date} {day} {time} {number}
+  storageTz?: string | null;      // tz the booking date/time is stored in (business tz)
+}
 
 const DAYS_NE = ["आइतबार", "सोमबार", "मंगलबार", "बुधबार", "बिहीबार", "शुक्रबार", "शनिबार"];
 const MONTHS_EN = [
@@ -39,14 +45,31 @@ function nepaliTime(hhmm: string): string {
 }
 
 // Post-booking confirmation message. Takes the client's name plus the booking's
-// Toronto date + start time (as stored), with date in English and day/time in Nepali.
-export function bookingWhatsappMessage(name: string, torontoDate: string, torontoStartTime: string): string {
+// stored date + start time (in the business's storage tz), with the appointment
+// expressed in Nepal time — date in English, day/time in Nepali.
+export function bookingWhatsappMessage(
+  name: string,
+  storedDate: string,
+  storedStartTime: string,
+  opts: WaOptions = {},
+): string {
   const firstName = (name || "").trim().split(/\s+/)[0] || "";
-  const { date, time } = torontoToTz(torontoDate, torontoStartTime, NEPAL_TZ);
+  const fromTz = opts.storageTz || TORONTO_TZ;
+  const { date, time } = tzToTz(storedDate, storedStartTime, fromTz, NEPAL_TZ);
   const [y, mo, d] = date.split("-").map(Number);
   const dayNe = DAYS_NE[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()];
   const dateEn = `${MONTHS_EN[mo - 1]} ${ordinal(d)}`;
   const timeNe = nepaliTime(time);
+  const waNumber = opts.whatsappNumber || DEFAULT_WA;
 
-  return `नमस्ते ${firstName} ज्यु , Moonlight Astrology ✨🌙 मा विश्वास गर्नुभएकोमा तपाईंलाई धेरै-धेरै धन्यवाद। तपाईंको Appointment यही ${dateEn}, ${dayNe} (नेपाली समय अनुसार ${timeNe}) तय गरिएको छ। कृपया निर्धारित समयमा मलाई मेरो WhatsApp Number ${ADMIN_WA}  मा message गर्नुहोला🙏🏻तपाईंको धैर्यताको लागि धन्यवाद! 🙏🏻🌙 Moonlight Astrology — guidance to your soul’s path🙏🏻`;
+  if (opts.template) {
+    return opts.template
+      .replaceAll("{name}", firstName)
+      .replaceAll("{date}", dateEn)
+      .replaceAll("{day}", dayNe)
+      .replaceAll("{time}", timeNe)
+      .replaceAll("{number}", waNumber);
+  }
+
+  return `नमस्ते ${firstName} ज्यु , Moonlight Astrology ✨🌙 मा विश्वास गर्नुभएकोमा तपाईंलाई धेरै-धेरै धन्यवाद। तपाईंको Appointment यही ${dateEn}, ${dayNe} (नेपाली समय अनुसार ${timeNe}) तय गरिएको छ। कृपया निर्धारित समयमा मलाई मेरो WhatsApp Number ${waNumber}  मा message गर्नुहोला🙏🏻तपाईंको धैर्यताको लागि धन्यवाद! 🙏🏻🌙 Moonlight Astrology — guidance to your soul’s path🙏🏻`;
 }

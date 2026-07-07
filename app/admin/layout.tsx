@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { BusinessProvider } from "@/lib/business";
 import {
   LayoutDashboard, Calendar, Clock, Users, Wallet, LogOut, Menu, X,
 } from "lucide-react";
@@ -42,6 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
+    <BusinessProvider>
     <div className="min-h-screen bg-[#05060f] flex">
       {/* Sidebar — desktop */}
       <aside className="hidden md:flex flex-col w-56 border-r border-[#1e2140] bg-[#0d0f1f] shrink-0">
@@ -126,5 +128,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {children}
       </main>
     </div>
+    </BusinessProvider>
   );
 }

@@ -6,7 +6,8 @@ import { format } from "date-fns";
 import { SERVICE_LABELS, type ServiceType } from "@/lib/database.types";
 import { CheckCircle, Wallet, MessageCircle, ChevronDown, ChevronUp, Search, Plus, Pencil, Save, X, Trash2 } from "lucide-react";
 import { COUNTRY_CODES, toWaNumber } from "@/lib/countries";
-import { TORONTO_TZ, torontoToTz, tzToToronto, fmt12 as tzFmt12, getTzAbbr, todayIn, currentTimeIn } from "@/lib/timezone";
+import { tzToTz, fmt12 as tzFmt12, getTzAbbr, todayIn, currentTimeIn } from "@/lib/timezone";
+import { useBusiness } from "@/lib/business";
 import BirthDatePicker from "@/components/BirthDatePicker";
 import { addToCalendar, markCalendarPaid, deleteCalendarEvent, updateCalendarEvent } from "@/lib/calendar";
 import { bookingWhatsappMessage } from "@/lib/whatsapp";
@@ -94,6 +95,15 @@ function LabelRow({ label, children }: { label: string; children: React.ReactNod
 }
 
 export default function BookingsPage() {
+  const { biz, settings, services, serviceByKey } = useBusiness();
+  const bizAbbr = getTzAbbr(biz.timezone);
+  const activeServices = services.filter(s => s.active);
+  const svcPrice    = (key: string) => serviceByKey(key)?.price ?? SERVICE_LABELS[key as ServiceType]?.price ?? 0;
+  const svcDuration = (key: string) => serviceByKey(key)?.duration_minutes ?? SERVICE_LABELS[key as ServiceType]?.duration ?? 60;
+  const svcNameEn   = (key: string) => serviceByKey(key)?.name_en ?? SERVICE_LABELS[key as ServiceType]?.en ?? key;
+  const bookingTimezones = BOOKING_TIMEZONES.some(z => z.value === biz.timezone)
+    ? BOOKING_TIMEZONES
+    : [{ value: biz.timezone, label: `Business (${getTzAbbr(biz.timezone)})` }, ...BOOKING_TIMEZONES];
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [filter, setFilter] = useState<Status>("all");
   const [search, setSearch] = useState("");
@@ -109,7 +119,7 @@ export default function BookingsPage() {
   const [addSlotsLoading, setAddSlotsLoading] = useState(false);
   const [addPreviewTz, setAddPreviewTz] = useState("America/Denver");
   // Timezone the admin enters/views slot times in (converted to Toronto for storage). Default Toronto (EDT).
-  const [bookTz, setBookTz] = useState(TORONTO_TZ);
+  const [bookTz, setBookTz] = useState(biz.timezone);
 
   // Edit booking
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -124,6 +134,7 @@ export default function BookingsPage() {
     let q = supabase
       .from("bookings")
       .select("*, clients(id, name, phone, birth_date, birth_time, birth_place)")
+      .eq("business_id", biz.id)
       .order("date", { ascending: false })
       .order("start_time");
     if (filter !== "all") q = q.eq("status", filter);
@@ -142,7 +153,7 @@ export default function BookingsPage() {
     setConfirmingPayment(null);
     // Update the calendar event's title from Unpaid → Paid
     if (b.clients?.name) {
-      markCalendarPaid({ name: b.clients.name, date: b.date, startTime: b.start_time });
+      markCalendarPaid({ name: b.clients.name, date: b.date, startTime: b.start_time, businessId: biz.id });
     }
     load();
   };
@@ -154,8 +165,8 @@ export default function BookingsPage() {
 
   // Returns true when the consultation window has fully passed (Toronto time).
   const isPastConsultation = (b: Booking): boolean => {
-    const nowDate = todayIn(TORONTO_TZ);
-    const nowTime = currentTimeIn(TORONTO_TZ);
+    const nowDate = todayIn(biz.timezone);
+    const nowTime = currentTimeIn(biz.timezone);
     if (b.date < nowDate) return true;
     if (b.date > nowDate) return false;
     const [h, m] = b.start_time.split(":").map(Number);
@@ -176,13 +187,13 @@ export default function BookingsPage() {
       setAddAvailSlots([]);
       setAddForm(f => ({ ...f, startTime: "" }));
 
-      const fromDate = tzToToronto(addForm.date, "00:00", bookTz).date;
-      const toDate   = tzToToronto(addForm.date, "23:59", bookTz).date;
+      const fromDate = tzToTz(addForm.date, "00:00", bookTz, biz.timezone).date;
+      const toDate   = tzToTz(addForm.date, "23:59", bookTz, biz.timezone).date;
 
       const [{ data: avail }, { data: existing }] = await Promise.all([
-        supabase.from("availability").select("*")
+        supabase.from("availability").select("*").eq("business_id", biz.id)
           .gte("date", fromDate).lte("date", toDate).eq("is_blocked", false),
-        supabase.from("bookings").select("date, start_time, duration_minutes")
+        supabase.from("bookings").select("date, start_time, duration_minutes").eq("business_id", biz.id)
           .gte("date", fromDate).lte("date", toDate).neq("status", "cancelled"),
       ]);
       if (cancelled) return;
@@ -209,7 +220,7 @@ export default function BookingsPage() {
           const conflict = bookedRanges.some(b => !(end <= b.start || cur >= b.end));
           if (!conflict) {
             const torontoTime = `${Math.floor(cur / 60).toString().padStart(2, "0")}:${(cur % 60).toString().padStart(2, "0")}`;
-            const { date: localDate, time: localTime } = torontoToTz(win.date, torontoTime, bookTz);
+            const { date: localDate, time: localTime } = tzToTz(win.date, torontoTime, biz.timezone, bookTz);
             if (localDate === addForm.date && !seen.has(localTime)) {
               seen.add(localTime);
               slots.push(localTime);
@@ -228,7 +239,7 @@ export default function BookingsPage() {
 
   // ── Add booking ────────────────────────────────────────────────────
   const handleAddServiceChange = (service: ServiceType) => {
-    setAddForm(f => ({ ...f, service, amount: SERVICE_LABELS[service].price, duration: SERVICE_LABELS[service].duration }));
+    setAddForm(f => ({ ...f, service, amount: svcPrice(service), duration: svcDuration(service) }));
   };
 
   const handleAddBooking = async () => {
@@ -255,20 +266,21 @@ export default function BookingsPage() {
         clientId = existing.id;
       } else {
         const { data: newClient, error: cErr } = await supabase.from("clients")
-          .insert({ name: clientName.trim(), phone: fullPhone, birth_date: clientBirthDate, birth_time: addForm.clientBirthTime || null, birth_place: clientBirthPlace.trim(), source: "web" as const })
+          .insert({ business_id: biz.id, name: clientName.trim(), phone: fullPhone, birth_date: clientBirthDate, birth_time: addForm.clientBirthTime || null, birth_place: clientBirthPlace.trim(), source: "web" as const } as never)
           .select("id").single();
         if (cErr) { setAddError(cErr.message); setAddSaving(false); return; }
         clientId = newClient!.id;
       }
 
-      // Convert the entered local (bookTz) date+time into Toronto storage time
-      const tor = tzToToronto(addForm.date, addForm.startTime, bookTz);
+      // Convert the entered local (bookTz) date+time into business storage time
+      const tor = tzToTz(addForm.date, addForm.startTime, bookTz, biz.timezone);
       const durationMinutes = addForm.slotMode === "custom"
-        ? (addForm.duration || SERVICE_LABELS[addForm.service].duration)
-        : SERVICE_LABELS[addForm.service].duration;
+        ? (addForm.duration || svcDuration(addForm.service))
+        : svcDuration(addForm.service);
 
       // Create booking
       const { error: bErr } = await supabase.from("bookings").insert({
+        business_id: biz.id,
         client_id: clientId,
         service_type: addForm.service,
         date: tor.date,
@@ -291,14 +303,15 @@ export default function BookingsPage() {
         date: tor.date,
         startTime: tor.time,
         durationMinutes,
-        service: SERVICE_LABELS[addForm.service].en,
+        service: svcNameEn(addForm.service),
         notes: addForm.notes.trim() || undefined,
         paymentStatus: addForm.paymentStatus,
+        businessId: biz.id,
       });
 
       setShowAdd(false);
       setAddForm({ ...DEFAULT_ADD });
-      setBookTz(TORONTO_TZ);
+      setBookTz(biz.timezone);
       load();
     } catch (e: any) {
       setAddError(e.message);
@@ -332,7 +345,7 @@ export default function BookingsPage() {
     await supabase.from("bookings").delete().eq("id", b.id);
     // Remove its calendar event
     if (b.clients?.name) {
-      deleteCalendarEvent({ name: b.clients.name, date: b.date, startTime: b.start_time });
+      deleteCalendarEvent({ name: b.clients.name, date: b.date, startTime: b.start_time, businessId: biz.id });
     }
     setExpanded(null);
     load();
@@ -372,6 +385,7 @@ export default function BookingsPage() {
         startTime: editForm.startTime,
         durationMinutes: newDuration,
         paymentStatus: editForm.paymentStatus,
+        businessId: biz.id,
       });
     }
     setEditingId(null);
@@ -402,12 +416,12 @@ export default function BookingsPage() {
   // Duration used for the time-preview end times
   const addDur = addForm.slotMode === "custom"
     ? (addForm.duration || 0)
-    : SERVICE_LABELS[addForm.service].duration;
+    : svcDuration(addForm.service);
 
   // The chosen input timezone + the entered time converted to Toronto (for preview + storage)
   const bookTzAbbr = getTzAbbr(bookTz);
   const bookToronto = (addForm.date && addForm.startTime)
-    ? tzToToronto(addForm.date, addForm.startTime, bookTz)
+    ? tzToTz(addForm.date, addForm.startTime, bookTz, biz.timezone)
     : null;
 
   return (
@@ -416,7 +430,7 @@ export default function BookingsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-white">Bookings</h1>
         <button
-          onClick={() => { setShowAdd(p => !p); setAddError(""); setAddAvailSlots([]); setAddForm({ ...DEFAULT_ADD }); setBookTz(TORONTO_TZ); }}
+          onClick={() => { setShowAdd(p => !p); setAddError(""); setAddAvailSlots([]); setAddForm({ ...DEFAULT_ADD }); setBookTz(biz.timezone); }}
           className={`flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl border transition-all ${
             showAdd ? "border-purple-500 bg-purple-500/10 text-purple-300" : "border-[#1e2140] text-slate-300 hover:border-purple-500/40"
           }`}
@@ -483,8 +497,11 @@ export default function BookingsPage() {
               <select className={selectCls} style={{ colorScheme: "dark" }}
                 value={addForm.service}
                 onChange={e => handleAddServiceChange(e.target.value as ServiceType)}>
-                {ACTIVE_SERVICES.map(s => (
-                  <option key={s} value={s}>{SERVICE_LABELS[s].en}</option>
+                {(activeServices.length > 0
+                  ? activeServices.map(s => ({ key: s.key, label: s.name_en }))
+                  : ACTIVE_SERVICES.map(s => ({ key: s, label: SERVICE_LABELS[s].en }))
+                ).map(o => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
                 ))}
               </select>
             </LabelRow>
@@ -509,7 +526,7 @@ export default function BookingsPage() {
               <select className={selectCls} style={{ colorScheme: "dark" }}
                 value={bookTz}
                 onChange={e => setBookTz(e.target.value)}>
-                {BOOKING_TIMEZONES.map(z => (
+                {bookingTimezones.map(z => (
                   <option key={z.value} value={z.value}>{z.label}</option>
                 ))}
               </select>
@@ -585,16 +602,16 @@ export default function BookingsPage() {
               </p>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">Toronto (ET)</span>
+                  <span className="text-slate-400">Business ({bizAbbr})</span>
                   <span className="text-white font-mono">
-                    {tzFmt12(bookToronto.time)} – {tzFmt12(addMinutesToTime(bookToronto.time, addDur))} ET
+                    {tzFmt12(bookToronto.time)} – {tzFmt12(addMinutesToTime(bookToronto.time, addDur))} {bizAbbr}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-400">Nepal (NPT)</span>
                   <span className="text-amber-400 font-mono">
                     {(() => {
-                      const s = torontoToTz(bookToronto.date, bookToronto.time, "Asia/Kathmandu").time;
+                      const s = tzToTz(bookToronto.date, bookToronto.time, biz.timezone, "Asia/Kathmandu").time;
                       return `${tzFmt12(s)} – ${tzFmt12(addMinutesToTime(s, addDur))} NPT`;
                     })()}
                   </span>
@@ -606,13 +623,13 @@ export default function BookingsPage() {
                     value={addPreviewTz}
                     onChange={e => setAddPreviewTz(e.target.value)}
                   >
-                    {BOOKING_TIMEZONES.filter(z => z.value !== TORONTO_TZ && z.value !== "Asia/Kathmandu").map(z => (
+                    {bookingTimezones.filter(z => z.value !== biz.timezone && z.value !== "Asia/Kathmandu").map(z => (
                       <option key={z.value} value={z.value}>{z.label}</option>
                     ))}
                   </select>
                   <span className="text-purple-300 font-mono shrink-0">
                     {(() => {
-                      const s = torontoToTz(bookToronto.date, bookToronto.time, addPreviewTz).time;
+                      const s = tzToTz(bookToronto.date, bookToronto.time, biz.timezone, addPreviewTz).time;
                       return `${tzFmt12(s)} – ${tzFmt12(addMinutesToTime(s, addDur))} ${getTzAbbr(addPreviewTz)}`;
                     })()}
                   </span>
@@ -714,8 +731,10 @@ export default function BookingsPage() {
                   <div className="min-w-[96px] shrink-0">
                     <p className="text-slate-300 text-sm font-medium">{format(new Date(b.date + "T12:00"), "MMM d")}</p>
                     <p className="text-slate-600 text-xs">{format(new Date(b.date + "T12:00"), "yyyy")}</p>
-                    <p className="text-purple-400 text-xs mt-1">{fmt12(b.start_time)} <span className="text-slate-500">EDT</span></p>
-                    <p className="text-amber-400/80 text-xs">{fmt12(torontoToTz(b.date, b.start_time, "Asia/Kathmandu").time)} <span className="text-slate-500">NPT</span></p>
+                    <p className="text-purple-400 text-xs mt-1">{fmt12(b.start_time)} <span className="text-slate-500">{bizAbbr}</span></p>
+                    {biz.timezone !== "Asia/Kathmandu" && (
+                      <p className="text-amber-400/80 text-xs">{fmt12(tzToTz(b.date, b.start_time, biz.timezone, "Asia/Kathmandu").time)} <span className="text-slate-500">NPT</span></p>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-semibold break-words">{b.clients?.name || "—"}</p>
@@ -884,7 +903,7 @@ export default function BookingsPage() {
 
                         {/* Utility: WhatsApp */}
                         {b.clients?.phone && (
-                          <a href={`https://wa.me/${toWaNumber(b.clients.phone)}?text=${encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time))}`}
+                          <a href={`https://wa.me/${toWaNumber(b.clients.phone)}?text=${encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time, { whatsappNumber: settings.whatsapp_number, template: settings.wa_template, storageTz: biz.timezone }))}`}
                             target="_blank"
                             className="flex items-center gap-1.5 text-xs font-semibold text-[#22c55e] bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg hover:bg-green-500/20 transition-all ml-auto">
                             <MessageCircle size={13} /> WhatsApp

@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { SERVICE_LABELS } from "@/lib/database.types";
 import { Search, ChevronDown, ChevronUp, Phone, MapPin, Calendar, MessageCircle, Trash2, Loader2 } from "lucide-react";
 import { toWaNumber } from "@/lib/countries";
+import { useBusiness } from "@/lib/business";
 
 interface Client {
   id: string;
@@ -32,6 +33,7 @@ interface ClientWithBookings extends Client {
 }
 
 export default function ClientsPage() {
+  const { biz } = useBusiness();
   const [clients, setClients] = useState<ClientWithBookings[]>([]);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -45,6 +47,7 @@ export default function ClientsPage() {
     const { data } = await supabase
       .from("clients")
       .select("*")
+      .eq("business_id", biz.id)
       .order("created_at", { ascending: false });
     setClients((data as ClientWithBookings[]) || []);
     setLoading(false);

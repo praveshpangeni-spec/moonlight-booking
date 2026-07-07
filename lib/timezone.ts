@@ -75,14 +75,20 @@ export function utcToTz(utcDate: Date, tz: string): { date: string; time: string
   };
 }
 
+// Convert a date+time from one timezone to another (multi-tenant: each
+// business stores times in its own timezone).
+export function tzToTz(dateStr: string, timeStr: string, fromTz: string, toTz: string) {
+  return utcToTz(tzToUtcDate(dateStr, timeStr, fromTz), toTz);
+}
+
 // Convert Toronto-stored date+time to another timezone.
 export function torontoToTz(dateStr: string, timeStr: string, targetTz: string) {
-  return utcToTz(tzToUtcDate(dateStr, timeStr, TORONTO_TZ), targetTz);
+  return tzToTz(dateStr, timeStr, TORONTO_TZ, targetTz);
 }
 
 // Convert date+time in any timezone to Toronto storage format.
 export function tzToToronto(dateStr: string, timeStr: string, fromTz: string) {
-  return utcToTz(tzToUtcDate(dateStr, timeStr, fromTz), TORONTO_TZ);
+  return tzToTz(dateStr, timeStr, fromTz, TORONTO_TZ);
 }
 
 // Short timezone abbreviation for display (e.g. "EDT", "AEST").
