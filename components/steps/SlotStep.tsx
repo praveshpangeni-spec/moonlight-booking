@@ -6,11 +6,11 @@ import "react-day-picker/dist/style.css";
 import { format, addDays, startOfDay } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { Loader2, Globe, ChevronDown } from "lucide-react";
-import type { BookingData, Lang } from "@/app/page";
+import type { BookingData, Lang } from "@/lib/booking-types";
+import { usePublicBiz } from "@/lib/public-biz";
 import { SERVICE_LABELS } from "@/lib/database.types";
 import {
-  TORONTO_TZ, COMMON_TIMEZONES,
-  torontoToTz, tzToToronto,
+  COMMON_TIMEZONES, tzToTz,
   getTzAbbr, fmt12,
 } from "@/lib/timezone";
 
@@ -30,10 +30,11 @@ interface Props {
 }
 
 export default function SlotStep({ booking, update, next, back, lang }: Props) {
+  const { biz, services } = usePublicBiz();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(booking.date ?? undefined);
   const [slots, setSlots] = useState<AvailableSlot[]>([]);
   const [loading, setLoading] = useState(false);
-  const [userTz, setUserTz] = useState(TORONTO_TZ);
+  const [userTz, setUserTz] = useState(biz.timezone);
   const [showTzPicker, setShowTzPicker] = useState(false);
   const [tzDetected, setTzDetected] = useState(false);
 
@@ -72,15 +73,17 @@ export default function SlotStep({ booking, update, next, back, lang }: Props) {
       const duration = booking.durationMinutes;
 
       // Find the Toronto date range that covers the user's selected local day
-      const torontoRangeStart = tzToToronto(selectedDateStr, "00:00", userTz).date;
-      const torontoRangeEnd   = tzToToronto(selectedDateStr, "23:59", userTz).date;
+      const torontoRangeStart = tzToTz(selectedDateStr, "00:00", userTz, biz.timezone).date;
+      const torontoRangeEnd   = tzToTz(selectedDateStr, "23:59", userTz, biz.timezone).date;
 
       const [{ data: avail }, { data: existing }] = await Promise.all([
         supabase.from("availability").select("*")
+          .eq("business_id", biz.id)
           .gte("date", torontoRangeStart)
           .lte("date", torontoRangeEnd)
           .eq("is_blocked", false),
         supabase.from("bookings").select("date, start_time, duration_minutes")
+          .eq("business_id", biz.id)
           .gte("date", torontoRangeStart)
           .lte("date", torontoRangeEnd)
           .neq("status", "cancelled"),
@@ -116,7 +119,7 @@ export default function SlotStep({ booking, update, next, back, lang }: Props) {
             };
             const torontoTime = fmtMins(cur);
             // Convert Toronto time → user's local timezone
-            const { date: localDate, time: localTime } = torontoToTz(window.date, torontoTime, userTz);
+            const { date: localDate, time: localTime } = tzToTz(window.date, torontoTime, biz.timezone, userTz);
             // Only include slots that actually fall on the user's selected local date
             if (localDate === selectedDateStr) {
               generated.push({
@@ -168,8 +171,11 @@ export default function SlotStep({ booking, update, next, back, lang }: Props) {
   };
 
   const tzAbbr = getTzAbbr(userTz);
-  const isTorontoTz = userTz === TORONTO_TZ;
-  const serviceInfo = booking.service ? SERVICE_LABELS[booking.service] : null;
+  const isTorontoTz = userTz === biz.timezone;
+  const svcRow = booking.service ? services.find(s => s.key === booking.service) : null;
+  const serviceInfo = svcRow
+    ? { en: svcRow.name_en, ne: svcRow.name_ne || svcRow.name_en }
+    : booking.service ? SERVICE_LABELS[booking.service] : null;
 
   return (
     <div className="cosmic-card p-6">

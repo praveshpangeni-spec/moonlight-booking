@@ -2,9 +2,10 @@
 
 import { format } from "date-fns";
 import { SERVICE_LABELS } from "@/lib/database.types";
-import type { BookingData, Lang } from "@/app/page";
+import type { BookingData, Lang } from "@/lib/booking-types";
+import { usePublicBiz } from "@/lib/public-biz";
 
-const WHATSAPP_NUMBER = "9779849938289";
+const FALLBACK_WA = "9779849938289";
 
 interface Props {
   booking: BookingData;
@@ -13,7 +14,12 @@ interface Props {
 }
 
 export default function SuccessScreen({ booking, lang }: Props) {
-  const serviceInfo = booking.service ? SERVICE_LABELS[booking.service] : null;
+  const { biz, settings, services } = usePublicBiz();
+  const waNumber = (settings.whatsapp_number || FALLBACK_WA).replace(/\D/g, "");
+  const svcRow = booking.service ? services.find(s => s.key === booking.service) : null;
+  const serviceInfo = svcRow
+    ? { en: svcRow.name_en, ne: svcRow.name_ne || svcRow.name_en }
+    : booking.service ? SERVICE_LABELS[booking.service] : null;
 
   const formatTime = (t: string) => {
     const [h, m] = t.split(":").map(Number);
@@ -24,8 +30,8 @@ export default function SuccessScreen({ booking, lang }: Props) {
 
   const waMessage = encodeURIComponent(
     lang === "en"
-      ? `Hello! I just made a payment for a session on Moonlight Astrology.\nName: ${booking.name}\nService: ${serviceInfo?.en}\nDate: ${booking.date ? format(booking.date, "MMMM d, yyyy") : ""}\nTime: ${booking.startTime ? formatTime(booking.startTime) : ""}`
-      : `नमस्ते! मैले Moonlight Astrology मा भुक्तानी गरें।\nनाम: ${booking.name}\nसेवा: ${serviceInfo?.ne}\nमिति: ${booking.date ? format(booking.date, "MMMM d, yyyy") : ""}\nसमय: ${booking.startTime ? formatTime(booking.startTime) : ""}`
+      ? `Hello! I just made a payment for a session on ${biz.name}.\nName: ${booking.name}\nService: ${serviceInfo?.en}\nDate: ${booking.date ? format(booking.date, "MMMM d, yyyy") : ""}\nTime: ${booking.startTime ? formatTime(booking.startTime) : ""}`
+      : `नमस्ते! मैले ${biz.name} मा भुक्तानी गरें।\nनाम: ${booking.name}\nसेवा: ${serviceInfo?.ne}\nमिति: ${booking.date ? format(booking.date, "MMMM d, yyyy") : ""}\nसमय: ${booking.startTime ? formatTime(booking.startTime) : ""}`
   );
 
   const t = {
@@ -81,7 +87,7 @@ export default function SuccessScreen({ booking, lang }: Props) {
 
         {/* WhatsApp button */}
         <a
-          href={`https://wa.me/${WHATSAPP_NUMBER}?text=${waMessage}`}
+          href={`https://wa.me/${waNumber}?text=${waMessage}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl px-6 py-4 transition-all w-full mb-4"

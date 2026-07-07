@@ -1,9 +1,10 @@
 "use client";
 
 import { SERVICE_LABELS, type ServiceType } from "@/lib/database.types";
-import type { BookingData, Lang } from "@/app/page";
+import type { BookingData, Lang } from "@/lib/booking-types";
+import { usePublicBiz } from "@/lib/public-biz";
 
-const SERVICE_ICONS: Record<ServiceType, string> = {
+const SERVICE_ICONS: Record<string, string> = {
   general: "🔮",
   birth_chart: "🌟",
   compatibility: "💑",
@@ -12,8 +13,8 @@ const SERVICE_ICONS: Record<ServiceType, string> = {
   yearly_forecast: "📅",
 };
 
-// Only these two services are offered to clients
-const ACTIVE_SERVICES: ServiceType[] = ["birth_chart", "compatibility"];
+// Fallback if the business has no services rows yet
+const FALLBACK_SERVICES: ServiceType[] = ["birth_chart", "compatibility"];
 
 interface Props {
   booking: BookingData;
@@ -23,9 +24,28 @@ interface Props {
 }
 
 export default function ServiceStep({ booking, update, next, lang }: Props) {
-  const select = (service: ServiceType) => {
-    const info = SERVICE_LABELS[service];
-    update({ service, durationMinutes: info.duration, amount: info.price });
+  const { services } = usePublicBiz();
+
+  // Business services (from DB) or the hardcoded fallback
+  const offered = services.length > 0
+    ? services.map(s => ({
+        key: s.key,
+        en: s.name_en,
+        ne: s.name_ne || s.name_en,
+        duration: s.duration_minutes,
+        price: Number(s.price),
+      }))
+    : FALLBACK_SERVICES.map(key => ({
+        key,
+        en: SERVICE_LABELS[key].en,
+        ne: SERVICE_LABELS[key].ne,
+        duration: SERVICE_LABELS[key].duration,
+        price: SERVICE_LABELS[key].price,
+      }));
+
+  const select = (key: string) => {
+    const info = offered.find(o => o.key === key)!;
+    update({ service: key as ServiceType, durationMinutes: info.duration, amount: info.price });
   };
 
   const t = {
@@ -42,20 +62,19 @@ export default function ServiceStep({ booking, update, next, lang }: Props) {
       <p className="text-slate-400 text-sm mb-6">{t.subtitle}</p>
 
       <div className="grid grid-cols-1 gap-3">
-        {ACTIVE_SERVICES.map((key) => {
-          const info = SERVICE_LABELS[key];
-          const selected = booking.service === key;
+        {offered.map((info) => {
+          const selected = booking.service === info.key;
           return (
             <button
-              key={key}
-              onClick={() => select(key)}
+              key={info.key}
+              onClick={() => select(info.key)}
               className={`flex items-center gap-4 p-4 rounded-xl border text-left transition-all duration-200 ${
                 selected
                   ? "border-purple-500 bg-purple-500/10"
                   : "border-[#1e2140] hover:border-[#2e3160] hover:bg-white/5"
               }`}
             >
-              <span className="text-2xl">{SERVICE_ICONS[key]}</span>
+              <span className="text-2xl">{SERVICE_ICONS[info.key] || "🔮"}</span>
               <div className="flex-1 min-w-0">
                 <p className={`font-medium ${selected ? "text-purple-300" : "text-slate-200"}`}>
                   {lang === "en" ? info.en : info.ne}

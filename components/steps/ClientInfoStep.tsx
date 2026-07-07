@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState } from "react";
-import type { BookingData, Lang } from "@/app/page";
+import type { BookingData, Lang } from "@/lib/booking-types";
 import BirthDatePicker from "@/components/BirthDatePicker";
 import { COUNTRIES } from "@/lib/countries";
 

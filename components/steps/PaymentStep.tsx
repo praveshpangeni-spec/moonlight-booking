@@ -9,13 +9,16 @@ import { SERVICE_LABELS } from "@/lib/database.types";
 import { addToCalendar } from "@/lib/calendar";
 import toast from "react-hot-toast";
 import Image from "next/image";
-import type { BookingData, Lang } from "@/app/page";
+import type { BookingData, Lang } from "@/lib/booking-types";
+import { usePublicBiz } from "@/lib/public-biz";
 
-const ESEWA_NUMBER  = "9849938289";
-const PAYPAL_ME     = "https://paypal.com/ncp/payment/VML8HKWNUAKD6";
-const USD_AMOUNT    = 75;
-const NPR_NEPAL     = 2500;   // eSewa — Nepal customers
-const NPR_INTL      = 11250;  // eSewa — international customers
+// Fallbacks (Moonlight's original values) when business_settings are empty
+const FALLBACK = {
+  esewa: "9849938289",
+  paypal: "https://paypal.com/ncp/payment/VML8HKWNUAKD6",
+  usd: 75,
+  nprIntl: 11250,
+};
 
 type PayMethod = "esewa" | "paypal";
 
@@ -27,8 +30,16 @@ interface Props {
 }
 
 export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
+  const { biz, settings } = usePublicBiz();
   // Use the explicit country field set from the dropdown in ClientInfoStep
   const isNepal = booking.country === "Nepal";
+
+  // Per-business payment settings
+  const esewaNumber = settings.esewa_id || FALLBACK.esewa;
+  const paypalLink  = settings.paypal_link || FALLBACK.paypal;
+  const usdAmount   = Number(settings.intl_usd_amount ?? FALLBACK.usd);
+  const nprIntl     = Number(settings.intl_npr_amount ?? FALLBACK.nprIntl);
+  const nprNepal    = booking.amount || 2500; // the selected service's price
 
   const [payMethod, setPayMethod] = useState<PayMethod>(isNepal ? "esewa" : "paypal");
   const [submitting, setSubmitting]   = useState(false);
@@ -41,11 +52,11 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
   const tzAbbr      = booking.userTz ? getTzAbbr(booking.userTz) : "ET";
 
   // Amount shown / stored — depends on method and Nepal vs international
-  const nprAmount = isNepal ? NPR_NEPAL : NPR_INTL;
+  const nprAmount = isNepal ? nprNepal : nprIntl;
   const displayAmount = payMethod === "paypal"
-    ? `$${USD_AMOUNT} USD`
+    ? `$${usdAmount} USD`
     : `NPR ${nprAmount.toLocaleString()}`;
-  const storeAmount = payMethod === "paypal" ? USD_AMOUNT : nprAmount;
+  const storeAmount = payMethod === "paypal" ? usdAmount : nprAmount;
 
   const t = {
     summary:        lang === "en" ? "Booking Summary"           : "बुकिङ सारांश",
@@ -65,24 +76,24 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
     confirmTitle:   lang === "en" ? "Confirm Payment"           : "भुक्तानी पुष्टि गर्नुहोस्",
     confirmMsg:     lang === "en"
       ? payMethod === "paypal"
-          ? `Have you sent $${USD_AMOUNT} to PayPal (${PAYPAL_ME})?`
-          : `Have you sent NPR ${nprAmount.toLocaleString()} to eSewa ${ESEWA_NUMBER}?`
+          ? `Have you sent $${usdAmount} to PayPal (${paypalLink})?`
+          : `Have you sent NPR ${nprAmount.toLocaleString()} to eSewa ${esewaNumber}?`
       : payMethod === "paypal"
-          ? `के तपाईंले PayPal मार्फत $${USD_AMOUNT} पठाउनुभयो?`
-          : `के तपाईंले eSewa ${ESEWA_NUMBER} मा NPR ${nprAmount.toLocaleString()} पठाउनुभयो?`,
+          ? `के तपाईंले PayPal मार्फत $${usdAmount} पठाउनुभयो?`
+          : `के तपाईंले eSewa ${esewaNumber} मा NPR ${nprAmount.toLocaleString()} पठाउनुभयो?`,
     yes:            lang === "en" ? "Yes, I've Paid"            : "हो, मैले तिरें",
     no:             lang === "en" ? "No, Go Back"               : "होइन, फर्कनुस्",
   };
 
   const copyEsewa = async () => {
-    await navigator.clipboard.writeText(ESEWA_NUMBER);
+    await navigator.clipboard.writeText(esewaNumber);
     setCopiedEsewa(true);
     toast.success(t.copied);
     setTimeout(() => setCopiedEsewa(false), 2000);
   };
 
   const copyPayPal = async () => {
-    await navigator.clipboard.writeText(PAYPAL_ME);
+    await navigator.clipboard.writeText(paypalLink);
     setCopiedPayPal(true);
     toast.success(t.copied);
     setTimeout(() => setCopiedPayPal(false), 2000);
@@ -103,6 +114,7 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
         gender:           booking.gender?.trim() || null,
         current_location: booking.currentLocation?.trim() || null,
         source:           "web" as const,
+        business_id:      biz.id,
       };
 
       // Anon users cannot SELECT clients (RLS), so avoid INSERT..RETURNING:
@@ -114,7 +126,7 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
       if (insertError) {
         if (insertError.code === "23505") {
           const { data: existingId, error: rpcError } = await supabase
-            .rpc("get_client_id_by_phone", { p_phone: clientPayload.phone });
+            .rpc("get_client_id_by_phone", { p_phone: clientPayload.phone, p_business: biz.id });
           if (rpcError || !existingId) throw new Error("Could not find client: " + rpcError?.message);
           clientId = existingId as string;
         } else {
@@ -124,6 +136,7 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
 
       const dateStr = booking.dbDate ?? format(booking.date!, "yyyy-MM-dd");
       const { error: bkError } = await supabase.from("bookings").insert({
+        business_id:      biz.id,
         client_id:        clientId,
         service_type:     booking.service!,
         date:             dateStr,
@@ -149,6 +162,7 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
         service: serviceInfo ? serviceInfo.en : undefined,
         notes: booking.notes?.trim() || undefined,
         paymentStatus: "unpaid",
+        businessId: biz.id,
       });
     } catch (err: any) {
       console.error("Background save error:", err);
@@ -199,7 +213,7 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
                   PayPal
                 </p>
                 <p className={`font-bold text-xl mt-1 ${payMethod === "paypal" ? "text-blue-400" : "text-slate-400"}`}>
-                  ${USD_AMOUNT} USD
+                  ${usdAmount} USD
                 </p>
               </button>
               <button
@@ -229,7 +243,7 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
               <p className="text-slate-300 text-sm text-center mb-4">{t.sendPayPal}</p>
               <div className="bg-[#0a0b1a] border border-[#1e2140] rounded-xl px-4 py-4 mb-4 text-center">
                 <p className="text-slate-500 text-xs mb-2">PayPal.me link</p>
-                <p className="text-blue-400 font-bold text-base break-all">{PAYPAL_ME}</p>
+                <p className="text-blue-400 font-bold text-base break-all">{paypalLink}</p>
                 <button onClick={copyPayPal} className="mt-3 flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-xs mx-auto">
                   {copiedPayPal ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
                   {copiedPayPal ? t.copied : (lang === "en" ? "Copy link" : "लिङ्क कपी गर्नुहोस्")}
@@ -238,8 +252,8 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl px-4 py-3 mb-5 text-center">
                 <p className="text-slate-400 text-xs">
                   {lang === "en"
-                    ? `Send exactly $${USD_AMOUNT} USD · Add your name in the note`
-                    : `ठ्याक्कै $${USD_AMOUNT} USD पठाउनुहोस् · नोटमा आफ्नो नाम लेख्नुहोस्`}
+                    ? `Send exactly $${usdAmount} USD · Add your name in the note`
+                    : `ठ्याक्कै $${usdAmount} USD पठाउनुहोस् · नोटमा आफ्नो नाम लेख्नुहोस्`}
                 </p>
               </div>
             </>
@@ -247,15 +261,17 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
             /* ── eSewa ── */
             <>
               <p className="text-slate-300 text-sm text-center mb-4">{t.scanQr}</p>
-              <div className="flex justify-center mb-4">
-                <div className="bg-white rounded-2xl p-3">
-                  <Image src="/Esewa.jpeg" alt="eSewa QR Code" width={200} height={200} className="rounded-xl" />
+              {biz.slug === "moonlight" && (
+                <div className="flex justify-center mb-4">
+                  <div className="bg-white rounded-2xl p-3">
+                    <Image src="/Esewa.jpeg" alt="eSewa QR Code" width={200} height={200} className="rounded-xl" />
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex items-center gap-3 bg-[#0a0b1a] border border-[#1e2140] rounded-xl px-4 py-3 mb-5">
                 <div className="flex items-center gap-2 flex-1">
                   <span className="text-green-400 font-bold text-sm">eSewa</span>
-                  <span className="text-white font-bold text-xl tracking-wider">{ESEWA_NUMBER}</span>
+                  <span className="text-white font-bold text-xl tracking-wider">{esewaNumber}</span>
                 </div>
                 <button onClick={copyEsewa} className="text-slate-400 hover:text-white transition-colors p-1">
                   {copiedEsewa ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}

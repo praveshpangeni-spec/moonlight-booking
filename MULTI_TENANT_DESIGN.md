@@ -225,3 +225,25 @@ Reuse the existing service-account integration with **no new OAuth work**:
   - Remaining: Phase 3 `/b/[slug]` public page (public booking is still the
     single-tenant `/` reading Moonlight via defaults), Phase 4 super-admin,
     Phase 5 Stripe.
+- **Phase 3 COMPLETE 2026-07-07** (branch `multi-tenant`, NOT deployed).
+  - `lib/booking-types.ts` (BookingData/Lang/INITIAL_BOOKING moved out of
+    app/page.tsx); `lib/public-biz.tsx` PublicBizProvider/usePublicBiz (anon
+    context by slug; suspended/unknown slug → "Booking Unavailable" since RLS
+    only exposes active businesses); `components/PublicBookingApp.tsx` (the
+    flow, header = biz.name); `app/b/[slug]/page.tsx`; `/` → redirect
+    `/b/moonlight`.
+  - Steps tenant-aware: ServiceStep lists the business's `services`; SlotStep
+    scopes availability/bookings by business + uses biz.timezone as storage tz;
+    PaymentStep uses settings (esewa/paypal/intl amounts; Nepal price = the
+    service's own price), tags client+booking+calendar with business_id, eSewa
+    QR image shown only for slug `moonlight`; SuccessScreen uses biz.name +
+    settings.whatsapp_number.
+  - **DB (applied live, verified safe):** `clients` UNIQUE(phone) →
+    UNIQUE(business_id, phone); RPC now `get_client_id_by_phone(p_phone,
+    p_business default null)` (old 1-arg dropped; single-param calls from the
+    deployed app verified working); dropped unused anon "Public can upsert
+    clients" UPDATE policy (security tightening).
+  - Anon context reads for /b/[slug] verified via REST (business by slug,
+    active services, settings).
+  - Remaining: Phase 4 super-admin page, Phase 5 Stripe, then SWITCHOVER
+    (deploy branch → verify /b/moonlight + admin live → onboard 2nd business).
