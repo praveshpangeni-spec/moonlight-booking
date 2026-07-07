@@ -20,6 +20,22 @@
   }
 }
 
+/* ── PWA / iPhone safe-area handling (standalone home-screen app) ── */
+.pwa-safe-top {
+  /* mobile admin top bar — clear the notch / status bar */
+  padding-top: calc(0.75rem + env(safe-area-inset-top));
+}
+@media (max-width: 767px) {
+  .admin-main {
+    padding-top: calc(3.5rem + env(safe-area-inset-top));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+/* Mobile nav drawer — clear the notch + fixed top bar so the first item (Dashboard) shows */
+.admin-drawer {
+  padding-top: calc(4rem + env(safe-area-inset-top));
+}
+
 @layer components {
   .cosmic-card {
     @apply bg-gradient-to-br from-[#0d0f1f] to-[#12153a] border border-[#1e2140] rounded-2xl;

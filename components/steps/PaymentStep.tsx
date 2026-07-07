@@ -1,16 +1,23 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { format } from "date-fns";
 import { Loader2, Copy, Check } from "lucide-react";
+import { getTzAbbr, fmt12 } from "@/lib/timezone";
 import { supabase } from "@/lib/supabase";
 import { SERVICE_LABELS } from "@/lib/database.types";
+import { addToCalendar } from "@/lib/calendar";
 import toast from "react-hot-toast";
 import Image from "next/image";
 import type { BookingData, Lang } from "@/app/page";
 
-const ESEWA_NUMBER = "9849938289";
-const WHATSAPP_NUMBER = "9779849938289";
+const ESEWA_NUMBER  = "9849938289";
+const PAYPAL_ME     = "https://paypal.com/ncp/payment/VML8HKWNUAKD6";
+const USD_AMOUNT    = 75;
+const NPR_NEPAL     = 2500;   // eSewa — Nepal customers
+const NPR_INTL      = 11250;  // eSewa — international customers
+
+type PayMethod = "esewa" | "paypal";
 
 interface Props {
   booking: BookingData;
@@ -20,124 +27,130 @@ interface Props {
 }
 
 export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
-  const [submitting, setSubmitting] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [confirming, setConfirming] = useState(false); // shows confirm modal
+  // Use the explicit country field set from the dropdown in ClientInfoStep
+  const isNepal = booking.country === "Nepal";
+
+  const [payMethod, setPayMethod] = useState<PayMethod>(isNepal ? "esewa" : "paypal");
+  const [submitting, setSubmitting]   = useState(false);
+  const [copiedEsewa, setCopiedEsewa] = useState(false);
+  const [copiedPayPal, setCopiedPayPal] = useState(false);
+  const [confirming, setConfirming]   = useState(false);
 
   const serviceInfo = booking.service ? SERVICE_LABELS[booking.service] : null;
+  const displayTime = booking.localStartTime ?? booking.startTime ?? "";
+  const tzAbbr      = booking.userTz ? getTzAbbr(booking.userTz) : "ET";
+
+  // Amount shown / stored — depends on method and Nepal vs international
+  const nprAmount = isNepal ? NPR_NEPAL : NPR_INTL;
+  const displayAmount = payMethod === "paypal"
+    ? `$${USD_AMOUNT} USD`
+    : `NPR ${nprAmount.toLocaleString()}`;
+  const storeAmount = payMethod === "paypal" ? USD_AMOUNT : nprAmount;
 
   const t = {
-    summary: lang === "en" ? "Booking Summary" : "बुकिङ सारांश",
-    service: lang === "en" ? "Service" : "सेवा",
-    date: lang === "en" ? "Date" : "मिति",
-    time: lang === "en" ? "Time" : "समय",
-    duration: lang === "en" ? "Duration" : "अवधि",
-    amount: lang === "en" ? "Amount to Pay" : "तिर्नु पर्ने रकम",
-    scanQr: lang === "en" ? "Scan QR or send to number" : "QR स्क्यान गर्नुहोस् वा नम्बरमा पठाउनुहोस्",
-    copied: lang === "en" ? "Copied!" : "कपी भयो!",
-    confirmPayment: lang === "en" ? "I've Made the Payment" : "मैले भुक्तानी गरें",
-    back: lang === "en" ? "Back" : "पछाडि",
-    submitting: lang === "en" ? "Saving..." : "सुरक्षित गर्दै...",
-    min: lang === "en" ? "min" : "मि",
-    // Confirm modal
-    confirmTitle: lang === "en" ? "Confirm Payment" : "भुक्तानी पुष्टि गर्नुहोस्",
-    confirmMsg: lang === "en"
-      ? `Have you sent NPR ${booking.amount?.toLocaleString()} to eSewa ${ESEWA_NUMBER}?`
-      : `के तपाईंले eSewa ${ESEWA_NUMBER} मा NPR ${booking.amount?.toLocaleString()} पठाउनुभयो?`,
-    yes: lang === "en" ? "Yes, I've Paid" : "हो, मैले तिरें",
-    no: lang === "en" ? "No, Go Back" : "होइन, फर्कनुस्",
+    summary:        lang === "en" ? "Booking Summary"           : "बुकिङ सारांश",
+    service:        lang === "en" ? "Service"                   : "सेवा",
+    date:           lang === "en" ? "Date"                      : "मिति",
+    time:           lang === "en" ? "Time"                      : "समय",
+    duration:       lang === "en" ? "Duration"                  : "अवधि",
+    amountLabel:    lang === "en" ? "Amount to Pay"             : "तिर्नु पर्ने रकम",
+    chooseMethod:   lang === "en" ? "Choose Payment Method"     : "भुक्तानी विधि छान्नुहोस्",
+    scanQr:         lang === "en" ? "Scan QR or send to number" : "QR स्क्यान वा नम्बरमा पठाउनुहोस्",
+    sendPayPal:     lang === "en" ? "Send payment via PayPal"   : "PayPal मार्फत भुक्तानी पठाउनुहोस्",
+    copied:         lang === "en" ? "Copied!"                   : "कपी भयो!",
+    confirmPayment: lang === "en" ? "I've Made the Payment"     : "मैले भुक्तानी गरें",
+    back:           lang === "en" ? "Back"                      : "पछाडि",
+    submitting:     lang === "en" ? "Saving..."                 : "सुरक्षित गर्दै...",
+    min:            lang === "en" ? "min"                       : "मि",
+    confirmTitle:   lang === "en" ? "Confirm Payment"           : "भुक्तानी पुष्टि गर्नुहोस्",
+    confirmMsg:     lang === "en"
+      ? payMethod === "paypal"
+          ? `Have you sent $${USD_AMOUNT} to PayPal (${PAYPAL_ME})?`
+          : `Have you sent NPR ${nprAmount.toLocaleString()} to eSewa ${ESEWA_NUMBER}?`
+      : payMethod === "paypal"
+          ? `के तपाईंले PayPal मार्फत $${USD_AMOUNT} पठाउनुभयो?`
+          : `के तपाईंले eSewa ${ESEWA_NUMBER} मा NPR ${nprAmount.toLocaleString()} पठाउनुभयो?`,
+    yes:            lang === "en" ? "Yes, I've Paid"            : "हो, मैले तिरें",
+    no:             lang === "en" ? "No, Go Back"               : "होइन, फर्कनुस्",
   };
 
-  const formatTime = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    const period = h >= 12 ? "PM" : "AM";
-    const hour = h > 12 ? h - 12 : h === 0 ? 12 : h;
-    return `${hour}:${m.toString().padStart(2, "0")} ${period}`;
-  };
-
-  const copyNumber = async () => {
+  const copyEsewa = async () => {
     await navigator.clipboard.writeText(ESEWA_NUMBER);
-    setCopied(true);
+    setCopiedEsewa(true);
     toast.success(t.copied);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopiedEsewa(false), 2000);
+  };
+
+  const copyPayPal = async () => {
+    await navigator.clipboard.writeText(PAYPAL_ME);
+    setCopiedPayPal(true);
+    toast.success(t.copied);
+    setTimeout(() => setCopiedPayPal(false), 2000);
   };
 
   const handleSubmit = async () => {
     setConfirming(false);
-
-    // Go to success page immediately — don't make client wait
     const tempId = crypto.randomUUID();
     onSuccess(tempId);
 
-    // Save to DB silently in background
     try {
-      // Build client payload — never send empty strings for optional fields
       const clientPayload = {
-        name: booking.name.trim(),
-        phone: booking.phone.trim(),
-        birth_date: booking.birthDate,
-        birth_time: booking.birthTime?.trim() || null,
-        birth_place: booking.birthPlace.trim(),
-        gender: booking.gender?.trim() || null,
-        source: "web" as const,
+        name:             booking.name.trim(),
+        phone:            booking.phone.trim(),
+        birth_date:       booking.birthDate,
+        birth_time:       booking.birthTime?.trim() || null,
+        birth_place:      booking.birthPlace.trim(),
+        gender:           booking.gender?.trim() || null,
+        current_location: booking.currentLocation?.trim() || null,
+        source:           "web" as const,
       };
 
-      // Try inserting client; if phone already exists, fetch the existing one
-      let client: any = null;
-      const { data: inserted, error: insertError } = await supabase
-        .from("clients")
-        .insert(clientPayload)
-        .select()
-        .single();
+      // Anon users cannot SELECT clients (RLS), so avoid INSERT..RETURNING:
+      // generate the id locally; on duplicate phone resolve via a narrow RPC.
+      let clientId: string = crypto.randomUUID();
+      const { error: insertError } = await supabase
+        .from("clients").insert({ id: clientId, ...clientPayload } as never);
 
       if (insertError) {
         if (insertError.code === "23505") {
-          // Duplicate phone — fetch existing client
-          const { data: existing, error: fetchError } = await supabase
-            .from("clients")
-            .select("*")
-            .eq("phone", clientPayload.phone)
-            .single();
-          if (fetchError || !existing) throw new Error("Could not find client: " + fetchError?.message);
-          client = existing;
+          const { data: existingId, error: rpcError } = await supabase
+            .rpc("get_client_id_by_phone", { p_phone: clientPayload.phone });
+          if (rpcError || !existingId) throw new Error("Could not find client: " + rpcError?.message);
+          clientId = existingId as string;
         } else {
-          console.error("Client insert error:", insertError);
           throw new Error(insertError.message);
         }
-      } else {
-        client = inserted;
       }
-      if (!client) throw new Error("No client found");
 
-      const dateStr = format(booking.date!, "yyyy-MM-dd");
-      const bookingPayload = {
-        client_id: client.id,
-        service_type: booking.service!,
-        date: dateStr,
-        start_time: booking.startTime!,
+      const dateStr = booking.dbDate ?? format(booking.date!, "yyyy-MM-dd");
+      const { error: bkError } = await supabase.from("bookings").insert({
+        client_id:        clientId,
+        service_type:     booking.service!,
+        date:             dateStr,
+        start_time:       booking.startTime!,
         duration_minutes: booking.durationMinutes,
-        status: "pending" as const,
-        amount: booking.amount,
-        payment_status: "unpaid" as const,
-        payment_method: "esewa" as const,
-        source: "web" as const,
-        client_notes: booking.notes?.trim() || null,
-      };
+        status:           "pending" as const,
+        amount:           storeAmount,
+        currency:         payMethod === "paypal" ? "USD" : "NPR",
+        payment_status:   "unpaid" as const,
+        payment_method:   payMethod,
+        source:           "web" as const,
+        client_notes:     booking.notes?.trim() || null,
+      });
 
-      const { data: bk, error: bkError } = await supabase
-        .from("bookings")
-        .insert(bookingPayload)
-        .select()
-        .single();
+      if (bkError) throw new Error(bkError.message);
 
-      if (bkError) {
-        console.error("Booking error:", bkError);
-        throw new Error(bkError.message);
-      }
-      if (!bk) throw new Error("No booking returned");
-
+      // Block the owner's Google Calendar (fire-and-forget)
+      addToCalendar({
+        name: booking.name.trim(),
+        date: dateStr,
+        startTime: booking.startTime!,
+        durationMinutes: booking.durationMinutes,
+        service: serviceInfo ? serviceInfo.en : undefined,
+        notes: booking.notes?.trim() || undefined,
+        paymentStatus: "unpaid",
+      });
     } catch (err: any) {
-      // Log silently — client already sees success page
       console.error("Background save error:", err);
     }
   };
@@ -152,9 +165,9 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
           </h3>
           <div className="space-y-2">
             {[
-              { label: t.service, value: serviceInfo ? (lang === "en" ? serviceInfo.en : serviceInfo.ne) : "" },
-              { label: t.date, value: booking.date ? format(booking.date, "MMMM d, yyyy") : "" },
-              { label: t.time, value: booking.startTime ? formatTime(booking.startTime) : "" },
+              { label: t.service,  value: serviceInfo ? (lang === "en" ? serviceInfo.en : serviceInfo.ne) : "" },
+              { label: t.date,     value: booking.date ? format(booking.date, "MMMM d, yyyy") : "" },
+              { label: t.time,     value: displayTime ? `${fmt12(displayTime)} ${tzAbbr}` : "" },
               { label: t.duration, value: `${booking.durationMinutes} ${t.min}` },
             ].map(({ label, value }) => (
               <div key={label} className="flex justify-between text-sm">
@@ -164,84 +177,120 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
             ))}
           </div>
           <div className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-center">
-            <p className="text-slate-400 text-xs mb-1">{t.amount}</p>
-            <p className="text-amber-400 font-bold text-3xl">
-              NPR {booking.amount.toLocaleString()}
-            </p>
+            <p className="text-slate-400 text-xs mb-1">{t.amountLabel}</p>
+            <p className="text-amber-400 font-bold text-3xl">{displayAmount}</p>
           </div>
         </div>
 
-        {/* eSewa Payment */}
+        {/* Payment Method — international customers get a choice */}
+        {!isNepal && (
+          <div className="cosmic-card p-5">
+            <p className="text-slate-400 text-sm font-semibold mb-3">{t.chooseMethod}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setPayMethod("paypal")}
+                className={`p-4 rounded-xl border text-center transition-all ${
+                  payMethod === "paypal"
+                    ? "border-blue-500 bg-blue-500/10"
+                    : "border-[#1e2140] hover:border-blue-500/40 hover:bg-white/3"
+                }`}
+              >
+                <p className={`font-bold text-sm ${payMethod === "paypal" ? "text-blue-300" : "text-slate-300"}`}>
+                  PayPal
+                </p>
+                <p className={`font-bold text-xl mt-1 ${payMethod === "paypal" ? "text-blue-400" : "text-slate-400"}`}>
+                  ${USD_AMOUNT} USD
+                </p>
+              </button>
+              <button
+                onClick={() => setPayMethod("esewa")}
+                className={`p-4 rounded-xl border text-center transition-all ${
+                  payMethod === "esewa"
+                    ? "border-green-500 bg-green-500/10"
+                    : "border-[#1e2140] hover:border-green-500/40 hover:bg-white/3"
+                }`}
+              >
+                <p className={`font-bold text-sm ${payMethod === "esewa" ? "text-green-300" : "text-slate-300"}`}>
+                  eSewa
+                </p>
+                <p className={`font-bold text-xl mt-1 ${payMethod === "esewa" ? "text-green-400" : "text-slate-400"}`}>
+                  NPR {nprAmount.toLocaleString()}
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Details */}
         <div className="cosmic-card p-5">
-          <p className="text-slate-300 text-sm text-center mb-4">{t.scanQr}</p>
-
-          {/* QR Code */}
-          <div className="flex justify-center mb-4">
-            <div className="bg-white rounded-2xl p-3">
-              <Image
-                src="/Esewa.jpeg"
-                alt="eSewa QR Code"
-                width={200}
-                height={200}
-                className="rounded-xl"
-              />
-            </div>
-          </div>
-
-          {/* eSewa number */}
-          <div className="flex items-center gap-3 bg-[#0a0b1a] border border-[#1e2140] rounded-xl px-4 py-3 mb-5">
-            <div className="flex items-center gap-2 flex-1">
-              <span className="text-green-400 font-bold text-sm">eSewa</span>
-              <span className="text-white font-bold text-xl tracking-wider">{ESEWA_NUMBER}</span>
-            </div>
-            <button onClick={copyNumber} className="text-slate-400 hover:text-white transition-colors p-1">
-              {copied ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}
-            </button>
-          </div>
+          {payMethod === "paypal" ? (
+            /* ── PayPal ── */
+            <>
+              <p className="text-slate-300 text-sm text-center mb-4">{t.sendPayPal}</p>
+              <div className="bg-[#0a0b1a] border border-[#1e2140] rounded-xl px-4 py-4 mb-4 text-center">
+                <p className="text-slate-500 text-xs mb-2">PayPal.me link</p>
+                <p className="text-blue-400 font-bold text-base break-all">{PAYPAL_ME}</p>
+                <button onClick={copyPayPal} className="mt-3 flex items-center gap-2 text-slate-400 hover:text-white transition-colors text-xs mx-auto">
+                  {copiedPayPal ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+                  {copiedPayPal ? t.copied : (lang === "en" ? "Copy link" : "लिङ्क कपी गर्नुहोस्")}
+                </button>
+              </div>
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl px-4 py-3 mb-5 text-center">
+                <p className="text-slate-400 text-xs">
+                  {lang === "en"
+                    ? `Send exactly $${USD_AMOUNT} USD · Add your name in the note`
+                    : `ठ्याक्कै $${USD_AMOUNT} USD पठाउनुहोस् · नोटमा आफ्नो नाम लेख्नुहोस्`}
+                </p>
+              </div>
+            </>
+          ) : (
+            /* ── eSewa ── */
+            <>
+              <p className="text-slate-300 text-sm text-center mb-4">{t.scanQr}</p>
+              <div className="flex justify-center mb-4">
+                <div className="bg-white rounded-2xl p-3">
+                  <Image src="/Esewa.jpeg" alt="eSewa QR Code" width={200} height={200} className="rounded-xl" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 bg-[#0a0b1a] border border-[#1e2140] rounded-xl px-4 py-3 mb-5">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="text-green-400 font-bold text-sm">eSewa</span>
+                  <span className="text-white font-bold text-xl tracking-wider">{ESEWA_NUMBER}</span>
+                </div>
+                <button onClick={copyEsewa} className="text-slate-400 hover:text-white transition-colors p-1">
+                  {copiedEsewa ? <Check size={20} className="text-green-400" /> : <Copy size={20} />}
+                </button>
+              </div>
+            </>
+          )}
 
           <div className="flex gap-3">
             <button onClick={back} className="btn-ghost flex-1" disabled={submitting}>
               {t.back}
             </button>
-            <button
-              onClick={() => setConfirming(true)}
-              className="btn-gold flex-1"
-              disabled={submitting}
-            >
+            <button onClick={() => setConfirming(true)} className="btn-gold flex-1" disabled={submitting}>
               {submitting ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 size={16} className="animate-spin" />
                   {t.submitting}
                 </span>
-              ) : (
-                t.confirmPayment
-              )}
+              ) : t.confirmPayment}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Confirm modal overlay */}
+      {/* Confirm modal */}
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-6"
           style={{ background: "rgba(5,6,15,0.85)", backdropFilter: "blur(6px)" }}>
           <div className="cosmic-card p-6 w-full max-w-sm text-center">
-            <div className="text-4xl mb-3">💸</div>
+            <div className="text-4xl mb-3">{payMethod === "paypal" ? "💳" : "💸"}</div>
             <h3 className="text-white font-bold text-lg mb-3">{t.confirmTitle}</h3>
             <p className="text-slate-400 text-sm mb-6">{t.confirmMsg}</p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setConfirming(false)}
-                className="btn-ghost flex-1"
-              >
-                {t.no}
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="btn-gold flex-1"
-              >
-                {t.yes}
-              </button>
+              <button onClick={() => setConfirming(false)} className="btn-ghost flex-1">{t.no}</button>
+              <button onClick={handleSubmit} className="btn-gold flex-1">{t.yes}</button>
             </div>
           </div>
         </div>

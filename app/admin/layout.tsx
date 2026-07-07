@@ -80,7 +80,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-[#0d0f1f] border-b border-[#1e2140] px-4 py-3 flex items-center justify-between">
+      <div className="pwa-safe-top md:hidden fixed top-0 left-0 right-0 z-50 bg-[#0d0f1f] border-b border-[#1e2140] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xl">🌙</span>
           <span className="text-white font-bold text-sm">Admin</span>
@@ -93,7 +93,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile drawer */}
       {open && (
         <div className="md:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setOpen(false)}>
-          <div className="w-56 h-full bg-[#0d0f1f] border-r border-[#1e2140] p-4 pt-16" onClick={(e) => e.stopPropagation()}>
+          <div className="admin-drawer w-56 h-full bg-[#0d0f1f] border-r border-[#1e2140] px-4 pb-4" onClick={(e) => e.stopPropagation()}>
             <nav className="space-y-1">
               {NAV.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href;
@@ -122,7 +122,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       )}
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto md:pt-0 pt-14">
+      <main className="admin-main flex-1 overflow-auto">
         {children}
       </main>
     </div>

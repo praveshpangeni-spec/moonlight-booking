@@ -1,10 +1,23 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
   title: "Moonlight Astrology — Book a Session",
   description: "Book your personal astrology consultation with Moonlight Astrology. Astrology for Better Life.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Moonlight",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
   openGraph: {
     title: "Moonlight Astrology — Book a Session",
     description: "Get your personal astrology reading. Birth chart, career, love, compatibility and more.",
@@ -12,10 +25,20 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#05060f",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
+        {/* Legacy iOS full-screen standalone flag (Next omits this; older iOS needs it) */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         <link
           href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600&display=swap"
           rel="stylesheet"

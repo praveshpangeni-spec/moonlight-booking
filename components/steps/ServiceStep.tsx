@@ -12,8 +12,8 @@ const SERVICE_ICONS: Record<ServiceType, string> = {
   yearly_forecast: "📅",
 };
 
-// Only these 3 are shown to clients
-const ACTIVE_SERVICES: ServiceType[] = ["general", "birth_chart", "compatibility"];
+// Only these two services are offered to clients
+const ACTIVE_SERVICES: ServiceType[] = ["birth_chart", "compatibility"];
 
 interface Props {
   booking: BookingData;
@@ -29,14 +29,11 @@ export default function ServiceStep({ booking, update, next, lang }: Props) {
   };
 
   const t = {
-    title: lang === "en" ? "Choose Your Service" : "आफ्नो सेवा छान्नुहोस्",
-    subtitle: lang === "en"
-      ? "Select the type of reading you need"
-      : "तपाईंलाई चाहिने परामर्शको प्रकार छान्नुहोस्",
-    duration: lang === "en" ? "min session" : "मिनेट",
-    price: lang === "en" ? "NPR" : "रु",
-    continue: lang === "en" ? "Continue" : "अगाडि बढ्नुहोस्",
-    select_prompt: lang === "en" ? "Please select a service" : "सेवा छान्नुहोस्",
+    title:         lang === "en" ? "Choose Your Service"                        : "आफ्नो सेवा छान्नुहोस्",
+    subtitle:      lang === "en" ? "Select the type of reading you need"        : "तपाईंलाई चाहिने परामर्शको प्रकार छान्नुहोस्",
+    duration:      lang === "en" ? "min session"                                : "मिनेट",
+    continue:      lang === "en" ? "Continue"                                   : "अगाडि बढ्नुहोस्",
+    select_prompt: lang === "en" ? "Please select a service"                   : "सेवा छान्नुहोस्",
   };
 
   return (
@@ -68,11 +65,6 @@ export default function ServiceStep({ booking, update, next, lang }: Props) {
                 )}
                 <p className="text-slate-500 text-xs mt-1">
                   {info.duration} {t.duration}
-                </p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className={`font-bold ${selected ? "text-amber-400" : "text-slate-300"}`}>
-                  {t.price} {info.price.toLocaleString()}
                 </p>
               </div>
               {selected && (

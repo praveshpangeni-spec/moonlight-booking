@@ -10,7 +10,7 @@ export type ServiceType =
 
 export type BookingStatus = "pending" | "confirmed" | "cancelled" | "completed";
 export type PaymentStatus = "unpaid" | "paid";
-export type PaymentMethod = "esewa" | "khalti" | "cash" | "bank_transfer";
+export type PaymentMethod = "esewa" | "khalti" | "cash" | "bank_transfer" | "paypal";
 export type LeadSource = "whatsapp" | "facebook" | "instagram" | "tiktok" | "web" | "referral";
 
 export interface Database {
@@ -26,6 +26,7 @@ export interface Database {
           birth_time: string | null;
           birth_place: string;
           gender: string | null;
+          current_location: string | null;
           source: LeadSource;
           notes: string | null;
           created_at: string;
@@ -74,7 +75,7 @@ export interface Database {
 export const SERVICE_LABELS: Record<ServiceType, { en: string; ne: string; duration: number; price: number }> = {
   general: { en: "General Consultation", ne: "सामान्य परामर्श", duration: 30, price: 1500 },
   birth_chart: { en: "Detailed Consultation", ne: "विस्तृत परामर्श", duration: 60, price: 2500 },
-  compatibility: { en: "Kundali Milan", ne: "कुण्डली मिलान", duration: 60, price: 2500 },
+  compatibility: { en: "Guna Milan", ne: "गुण मिलान", duration: 60, price: 2500 },
   // kept for DB compatibility, not shown in UI
   career_finance: { en: "Career & Finance", ne: "करियर र आर्थिक", duration: 45, price: 1500 },
   love_relationship: { en: "Love & Relationship", ne: "प्रेम र सम्बन्ध", duration: 45, price: 1500 },

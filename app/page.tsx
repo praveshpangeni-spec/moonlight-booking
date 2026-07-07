@@ -16,7 +16,10 @@ export type Lang = "en" | "ne";
 export interface BookingData {
   service: ServiceType | null;
   date: Date | null;
-  startTime: string | null;
+  startTime: string | null;     // Toronto HH:mm — stored in DB
+  dbDate: string | null;        // Toronto yyyy-MM-dd — stored in DB
+  localStartTime: string | null; // User's local HH:mm — display only
+  userTz: string;               // User's detected/selected timezone
   durationMinutes: number;
   amount: number;
   name: string;
@@ -25,6 +28,8 @@ export interface BookingData {
   birthTime: string;
   birthPlace: string;
   gender: string;
+  currentLocation: string;
+  country: string;
   notes: string;
 }
 
@@ -32,6 +37,9 @@ const INITIAL_BOOKING: BookingData = {
   service: null,
   date: null,
   startTime: null,
+  dbDate: null,
+  localStartTime: null,
+  userTz: "UTC",
   durationMinutes: 60,
   amount: 0,
   name: "",
@@ -40,6 +48,8 @@ const INITIAL_BOOKING: BookingData = {
   birthTime: "",
   birthPlace: "",
   gender: "",
+  currentLocation: "",
+  country: "Nepal",
   notes: "",
 };
 

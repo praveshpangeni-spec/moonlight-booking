@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { SERVICE_LABELS } from "@/lib/database.types";
-import { Search, ChevronDown, ChevronUp, Phone, MapPin, Calendar, MessageCircle } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, Phone, MapPin, Calendar, MessageCircle, Trash2, Loader2 } from "lucide-react";
+import { toWaNumber } from "@/lib/countries";
 
 interface Client {
   id: string;
@@ -37,6 +38,7 @@ export default function ClientsPage() {
   const [bookingMap, setBookingMap] = useState<Record<string, Booking[]>>({});
   const [loading, setLoading] = useState(true);
   const [loadingBookings, setLoadingBookings] = useState<string | null>(null);
+  const [deletingClient, setDeletingClient] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -69,6 +71,18 @@ export default function ClientsPage() {
       setExpanded(id);
       loadBookings(id);
     }
+  };
+
+  const deleteClient = async (id: string, name: string) => {
+    if (!window.confirm(`Delete ${name} and all their bookings? This cannot be undone.`)) return;
+    setDeletingClient(id);
+    // Delete bookings first to avoid FK constraint, then client
+    await supabase.from("bookings").delete().eq("client_id", id);
+    await supabase.from("clients").delete().eq("id", id);
+    setClients(prev => prev.filter(c => c.id !== id));
+    setBookingMap(prev => { const n = { ...prev }; delete n[id]; return n; });
+    if (expanded === id) setExpanded(null);
+    setDeletingClient(null);
   };
 
   const fmt12 = (t: string) => {
@@ -175,20 +189,30 @@ export default function ClientsPage() {
                       )}
                     </div>
 
-                    {/* WhatsApp + stats */}
+                    {/* WhatsApp + stats + delete */}
                     <div className="flex items-center gap-3">
                       <a
-                        href={`https://wa.me/977${c.phone.replace(/^0/, "")}?text=${encodeURIComponent(`नमस्ते ${c.name}!`)}`}
+                        href={`https://wa.me/${toWaNumber(c.phone)}?text=${encodeURIComponent(`नमस्ते ${c.name}!`)}`}
                         target="_blank"
                         className="flex items-center gap-1.5 text-xs font-semibold text-[#22c55e] bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg hover:bg-green-500/20 transition-all"
                       >
                         <MessageCircle size={13} /> WhatsApp
                       </a>
                       {bookingMap[c.id] && (
-                        <span className="text-slate-600 text-xs">
+                        <span className="text-slate-600 text-xs flex-1">
                           {sessionCount} session{sessionCount !== 1 ? "s" : ""} · NPR {totalSpent.toLocaleString()} paid
                         </span>
                       )}
+                      <button
+                        onClick={() => deleteClient(c.id, c.name)}
+                        disabled={deletingClient === c.id}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/30 px-3 py-1.5 rounded-lg hover:bg-red-500/20 transition-all disabled:opacity-50"
+                      >
+                        {deletingClient === c.id
+                          ? <Loader2 size={13} className="animate-spin" />
+                          : <Trash2 size={13} />}
+                        Delete
+                      </button>
                     </div>
 
                     {/* Booking history */}

@@ -1,10 +1,13 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { SERVICE_LABELS } from "@/lib/database.types";
-import { CheckCircle, Clock, Wallet, RefreshCw, MessageCircle } from "lucide-react";
+import { Clock, Wallet, RefreshCw, MessageCircle, CalendarDays } from "lucide-react";
+import { toWaNumber } from "@/lib/countries";
+import { bookingWhatsappMessage } from "@/lib/whatsapp";
+import { TORONTO_TZ, todayIn, fmt12 as tzFmt12, torontoToTz } from "@/lib/timezone";
 
 interface Booking {
   id: string;
@@ -13,54 +16,95 @@ interface Booking {
   duration_minutes: number;
   status: string;
   payment_status: string;
+  payment_method: string | null;
   amount: number;
+  currency: string | null;
   service_type: string;
   clients: { name: string; phone: string } | null;
 }
 
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  pending:   "bg-amber-500/20 text-amber-400",
+  confirmed: "bg-green-500/20 text-green-400",
+  completed: "bg-slate-500/20 text-slate-400",
+  cancelled: "bg-red-500/20 text-red-400",
+};
+
 export default function AdminDashboard() {
-  const [todayBookings, setTodayBookings] = useState<Booking[]>([]);
+  const [weekBookings, setWeekBookings] = useState<Booking[]>([]);
   const [stats, setStats] = useState({ today: 0, pending: 0, unpaid: 0 });
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const today = format(new Date(), "yyyy-MM-dd");
+    setLoading(true);
+    const today = todayIn(TORONTO_TZ);
+    const weekEnd = addDays(today, 6);
 
-    const [{ data: todayData }, { data: pending }, { data: unpaid }] = await Promise.all([
-      supabase.from("bookings").select("*, clients(name, phone)").eq("date", today).neq("status", "cancelled").order("start_time"),
+    const [{ data: week }, { data: pending }, { data: unpaid }] = await Promise.all([
+      supabase
+        .from("bookings")
+        .select("*, clients(name, phone)")
+        .gte("date", today)
+        .lte("date", weekEnd)
+        .neq("status", "cancelled")
+        .order("date")
+        .order("start_time"),
       supabase.from("bookings").select("id").eq("status", "pending"),
       supabase.from("bookings").select("id").eq("payment_status", "unpaid").neq("status", "cancelled"),
     ]);
 
-    setTodayBookings((todayData as Booking[]) || []);
-    setStats({ today: todayData?.length || 0, pending: pending?.length || 0, unpaid: unpaid?.length || 0 });
+    const all = (week as Booking[]) || [];
+    setWeekBookings(all);
+    setStats({
+      today:   all.filter(b => b.date === today).length,
+      pending: pending?.length || 0,
+      unpaid:  unpaid?.length || 0,
+    });
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
-  const confirm = async (id: string) => {
-    await supabase.from("bookings").update({ status: "confirmed" }).eq("id", id);
-    load();
+  const wa = (b: Booking) => {
+    if (!b.clients?.phone) return;
+    const msg = encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time));
+    window.open(`https://wa.me/${toWaNumber(b.clients.phone)}?text=${msg}`, "_blank");
   };
 
-  const markPaid = async (id: string) => {
-    await supabase.from("bookings").update({ payment_status: "paid" }).eq("id", id);
-    load();
-  };
+  const today = todayIn(TORONTO_TZ);
 
-  const fmt12 = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
-    return `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-  };
+  // Build 7-day list with labels
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const dateStr = addDays(today, i);
+    const jsDate = new Date(dateStr + "T12:00:00");
+    const dayLabel =
+      i === 0 ? "Today" :
+      i === 1 ? "Tomorrow" :
+      format(jsDate, "EEEE");
+    const dateLabel = format(jsDate, "MMM d");
+    return { dateStr, dayLabel, dateLabel, isToday: i === 0 };
+  });
 
-  const wa = (phone: string, name: string) => {
-    const msg = encodeURIComponent(`नमस्ते ${name}! तपाईंको Moonlight Astrology मा सत्र पुष्टि भएको छ। 🌙`);
-    window.open(`https://wa.me/977${phone.replace(/^0/, "")}?text=${msg}`, "_blank");
-  };
+  // Group by date
+  const byDate: Record<string, Booking[]> = {};
+  for (const b of weekBookings) {
+    if (!byDate[b.date]) byDate[b.date] = [];
+    byDate[b.date].push(b);
+  }
+
+  const amtDisplay = (b: Booking) =>
+    (b.currency || (b.payment_method === "paypal" ? "USD" : "NPR")) === "USD"
+      ? `$${b.amount.toLocaleString()}`
+      : `NPR ${b.amount.toLocaleString()}`;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -75,98 +119,106 @@ export default function AdminDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         {[
-          { label: "Today's Sessions", value: stats.today, icon: Clock, color: "purple" },
-          { label: "Pending Confirm", value: stats.pending, icon: Clock, color: "amber" },
-          { label: "Awaiting Payment", value: stats.unpaid, icon: Wallet, color: "red" },
-        ].map(({ label, value, icon: Icon, color }) => (
+          { label: "Today's Sessions", value: stats.today, color: "purple" },
+          { label: "Pending Confirm",  value: stats.pending, color: "amber" },
+          { label: "Awaiting Payment", value: stats.unpaid,  color: "red" },
+        ].map(({ label, value, color }) => (
           <div key={label} className={`cosmic-card p-4 border-l-2 ${
-            color === "purple" ? "border-l-purple-500" : color === "amber" ? "border-l-amber-500" : "border-l-red-500"
+            color === "purple" ? "border-l-purple-500" :
+            color === "amber"  ? "border-l-amber-500"  : "border-l-red-500"
           }`}>
             <p className="text-slate-500 text-xs mb-1">{label}</p>
             <p className={`text-3xl font-bold ${
-              color === "purple" ? "text-purple-300" : color === "amber" ? "text-amber-400" : "text-red-400"
+              color === "purple" ? "text-purple-300" :
+              color === "amber"  ? "text-amber-400"  : "text-red-400"
             }`}>{value}</p>
           </div>
         ))}
       </div>
 
-      {/* Today's sessions */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-white">Today's Sessions</h2>
-        <span className="text-slate-500 text-sm">{format(new Date(), "MMM d")}</span>
+      {/* Week schedule */}
+      <div className="flex items-center gap-2 mb-5">
+        <CalendarDays size={18} className="text-amber-400" />
+        <h2 className="text-lg font-semibold text-white">This Week</h2>
       </div>
 
       {loading ? (
         <div className="cosmic-card p-12 text-center text-slate-500">Loading...</div>
-      ) : todayBookings.length === 0 ? (
-        <div className="cosmic-card p-12 text-center">
-          <p className="text-slate-400 text-lg mb-1">No sessions today</p>
-          <p className="text-slate-600 text-sm">Enjoy your day! 🌙</p>
-        </div>
       ) : (
-        <div className="space-y-3">
-          {todayBookings.map((b) => {
-            const service = SERVICE_LABELS[b.service_type as keyof typeof SERVICE_LABELS];
+        <div className="space-y-4">
+          {weekDays.map(({ dateStr, dayLabel, dateLabel, isToday }) => {
+            const dayBookings = byDate[dateStr] || [];
             return (
-              <div key={b.id} className="cosmic-card p-4">
-                <div className="flex items-start gap-4">
-                  {/* Time */}
-                  <div className="text-center min-w-[60px]">
-                    <p className="text-purple-300 font-bold text-sm">{fmt12(b.start_time)}</p>
-                    <p className="text-slate-600 text-xs">{b.duration_minutes}m</p>
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1">
-                    <p className="text-white font-semibold">{b.clients?.name || "—"}</p>
-                    <p className="text-slate-400 text-sm">{service?.ne || b.service_type}</p>
-                  </div>
-
-                  {/* Amount + badges */}
-                  <div className="text-right space-y-1">
-                    <p className="text-amber-400 font-bold">NPR {b.amount.toLocaleString()}</p>
-                    <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${
-                      b.status === "confirmed" ? "bg-green-500/20 text-green-400" :
-                      b.status === "completed" ? "bg-slate-500/20 text-slate-400" :
-                      "bg-amber-500/20 text-amber-400"
-                    }`}>
-                      {b.status}
+              <div key={dateStr} className={`cosmic-card overflow-hidden ${isToday ? "border border-purple-500/40" : ""}`}>
+                {/* Day header */}
+                <div className={`flex items-center justify-between px-4 py-3 ${
+                  isToday ? "bg-purple-500/10" : "bg-white/2"
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <span className={`font-bold text-sm ${isToday ? "text-purple-300" : "text-slate-300"}`}>
+                      {dayLabel}
                     </span>
-                    <span className={`block text-xs px-2 py-0.5 rounded-full font-medium ${
-                      b.payment_status === "paid" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                    }`}>
-                      {b.payment_status}
-                    </span>
+                    <span className="text-slate-600 text-xs">{dateLabel}</span>
                   </div>
+                  {dayBookings.length > 0 ? (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      isToday ? "bg-purple-500/20 text-purple-300" : "bg-white/10 text-slate-400"
+                    }`}>
+                      {dayBookings.length} session{dayBookings.length !== 1 ? "s" : ""}
+                    </span>
+                  ) : (
+                    <span className="text-slate-700 text-xs">free</span>
+                  )}
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex gap-2 mt-3 pt-3 border-t border-[#1e2140]">
-                  {b.status === "pending" && (
-                    <button
-                      onClick={() => confirm(b.id)}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-green-400 bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg hover:bg-green-500/20 transition-all"
-                    >
-                      <CheckCircle size={13} /> Confirm
-                    </button>
-                  )}
-                  {b.payment_status === "unpaid" && (
-                    <button
-                      onClick={() => markPaid(b.id)}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-500/20 transition-all"
-                    >
-                      <Wallet size={13} /> Mark Paid
-                    </button>
-                  )}
-                  {b.clients?.phone && (
-                    <button
-                      onClick={() => wa(b.clients!.phone, b.clients!.name)}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-[#22c55e] bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg hover:bg-green-500/20 transition-all ml-auto"
-                    >
-                      <MessageCircle size={13} /> WhatsApp
-                    </button>
-                  )}
-                </div>
+                {/* Bookings */}
+                {dayBookings.length > 0 && (
+                  <div className="divide-y divide-[#1e2140]">
+                    {dayBookings.map((b) => {
+                      const service = SERVICE_LABELS[b.service_type as keyof typeof SERVICE_LABELS];
+                      return (
+                        <div key={b.id} className="flex items-center gap-2 px-3 py-3 hover:bg-white/2 transition-all">
+                          {/* Time */}
+                          <div className="min-w-[80px] shrink-0 leading-tight">
+                            <p className="text-white font-bold text-xs">{tzFmt12(b.start_time)} <span className="text-slate-500 font-normal">EDT</span></p>
+                            <p className="text-amber-400/80 text-[11px]">{tzFmt12(torontoToTz(b.date, b.start_time, "Asia/Kathmandu").time)} <span className="text-slate-500">NPT</span></p>
+                            <p className="text-slate-600 text-[11px]">{b.duration_minutes} min</p>
+                          </div>
+
+                          {/* Client + service */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-slate-200 font-semibold text-sm leading-tight break-words">{b.clients?.name || "—"}</p>
+                            <p className="text-slate-500 text-[11px] truncate">{service?.en || b.service_type}</p>
+                          </div>
+
+                          {/* Amount + status badges (pushed right) */}
+                          <div className="flex flex-col items-end gap-0.5 shrink-0 ml-auto">
+                            <span className="text-amber-400 text-xs font-bold whitespace-nowrap">{amtDisplay(b)}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${STATUS_COLOR[b.status] || STATUS_COLOR.pending}`}>
+                              {b.status}
+                            </span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              b.payment_status === "paid" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                            }`}>
+                              {b.payment_status}
+                            </span>
+                          </div>
+
+                          {/* WhatsApp */}
+                          {b.clients?.phone && (
+                            <button
+                              onClick={() => wa(b)}
+                              className="shrink-0 p-1.5 rounded-lg text-slate-500 hover:text-green-400 hover:bg-green-500/10 transition-all"
+                              title="WhatsApp"
+                            >
+                              <MessageCircle size={14} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
