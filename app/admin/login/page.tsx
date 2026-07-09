@@ -16,7 +16,9 @@ export default function AdminLogin() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // Allow a bare username (e.g. "precious_pravesh") — auth is email-based
+    const loginEmail = email.includes("@") ? email.trim() : `${email.trim()}@moonlight.app`;
+    const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     if (error) {
       setError(error.message);
       setLoading(false);
@@ -38,11 +40,11 @@ export default function AdminLogin() {
         <form onSubmit={login} className="space-y-3">
           <input
             className="input-cosmic"
-            type="email"
-            placeholder="Email"
+            type="text"
+            placeholder="Email or username"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
+            autoComplete="username"
             required
           />
           <input
