@@ -1,19 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { Plus, ChevronDown, ChevronUp, Save, Trash2, Power, ExternalLink } from "lucide-react";
+import { superCall, type SuperBiz, type SuperSvc } from "@/lib/super";
+import { Plus, ChevronDown, ChevronUp, Save, Trash2, Power, ExternalLink, KeyRound } from "lucide-react";
 
-// Super-admin panel: create businesses, manage settings/services, suspend/activate.
-// Only users in super_admins can see or use it (enforced server-side too).
-
-interface Svc { id: string; key: string; name_en: string; name_ne: string | null; duration_minutes: number; price: number; active: boolean; }
-interface Biz {
-  id: string; slug: string; name: string; timezone: string; currency: string;
-  status: string; plan: string; valid_until: string | null;
-  owner_email: string | null;
-  settings: any; services: Svc[];
-}
+// Create and manage businesses: settings, services, status, owner password.
 
 const TZS = [
   { value: "Asia/Kathmandu", label: "Nepal (NPT)" },
@@ -38,58 +29,37 @@ const DEFAULT_NEW = {
   whatsapp_number: "", esewa_id: "", paypal_link: "", google_calendar_id: "",
 };
 
-export default function SuperAdminPage() {
-  const [allowed, setAllowed] = useState<boolean | null>(null);
-  const [businesses, setBusinesses] = useState<Biz[]>([]);
+export default function SuperBusinessesPage() {
+  const [businesses, setBusinesses] = useState<SuperBiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ ...DEFAULT_NEW });
-
-  // Per-business edit buffers
   const [settingsBuf, setSettingsBuf] = useState<Record<string, any>>({});
   const [newSvc, setNewSvc] = useState({ key: "", name_en: "", duration_minutes: 60, price: 2500 });
 
-  const call = async (action: string, payload: Record<string, unknown> = {}) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch("/api/superadmin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-      body: JSON.stringify({ action, ...payload }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "request failed");
-    return data;
-  };
-
   const load = async () => {
     setLoading(true);
-    try {
-      const data = await call("list");
-      setBusinesses(data.businesses || []);
-    } catch (e: any) { setError(e.message); }
+    try { setBusinesses((await superCall("list")).businesses || []); }
+    catch (e: any) { setError(e.message); }
     setLoading(false);
   };
 
-  useEffect(() => {
-    supabase.rpc("is_super_admin").then(({ data }) => {
-      setAllowed(!!data);
-      if (data) load();
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
-    setError(""); setBusy(true);
+    setError(""); setNotice(""); setBusy(true);
     try { await fn(); await load(); }
     catch (e: any) { setError(e.message); }
     setBusy(false);
   };
 
   const createBusiness = () => run(async () => {
-    await call("create-business", {
+    await superCall("create-business", {
       name: form.name, slug: form.slug, timezone: form.timezone, currency: form.currency,
       ownerEmail: form.ownerEmail, ownerPassword: form.ownerPassword,
       settings: {
@@ -101,40 +71,42 @@ export default function SuperAdminPage() {
     });
     setForm({ ...DEFAULT_NEW });
     setShowAdd(false);
+    setNotice("Business created.");
   });
 
-  const toggleStatus = (b: Biz) => {
+  const toggleStatus = (b: SuperBiz) => {
     const to = b.status === "active" ? "suspended" : "active";
-    if (!confirm(`${to === "suspended" ? "Suspend" : "Activate"} ${b.name}? ${to === "suspended" ? "Their public page AND admin go offline." : ""}`)) return;
-    run(() => call("set-status", { businessId: b.id, status: to }));
+    if (!confirm(`${to === "suspended" ? "Suspend" : "Activate"} ${b.name}?${to === "suspended" ? " Their public page AND admin go offline." : ""}`)) return;
+    run(() => superCall("set-status", { businessId: b.id, status: to }));
   };
 
-  const saveSettings = (b: Biz) => run(() => call("update-settings", { businessId: b.id, settings: settingsBuf[b.id] || {} }));
+  const resetPassword = (b: SuperBiz) => {
+    const pw = prompt(`New password for ${b.owner_email} (min 8 chars):`);
+    if (!pw) return;
+    if (pw.length < 8) { setError("Password must be at least 8 characters"); return; }
+    run(async () => {
+      await superCall("reset-owner-password", { businessId: b.id, newPassword: pw });
+      setNotice(`Password updated for ${b.owner_email}.`);
+    });
+  };
 
-  const saveService = (b: Biz, s: Svc) => run(() => call("upsert-service", { businessId: b.id, service: s }));
-  const addService = (b: Biz) => run(async () => {
-    await call("upsert-service", { businessId: b.id, service: newSvc });
+  const saveSettings = (b: SuperBiz) => run(() => superCall("update-settings", { businessId: b.id, settings: settingsBuf[b.id] || {} }));
+  const saveService = (b: SuperBiz, s: SuperSvc) => run(() => superCall("upsert-service", { businessId: b.id, service: s }));
+  const addService = (b: SuperBiz) => run(async () => {
+    await superCall("upsert-service", { businessId: b.id, service: newSvc });
     setNewSvc({ key: "", name_en: "", duration_minutes: 60, price: 2500 });
   });
-  const removeService = (b: Biz, s: Svc) => {
+  const removeService = (b: SuperBiz, s: SuperSvc) => {
     if (!confirm(`Delete service "${s.name_en}"?`)) return;
-    run(() => call("delete-service", { serviceId: s.id }));
+    run(() => superCall("delete-service", { serviceId: s.id }));
   };
-
-  if (allowed === null) return <div className="p-10 text-center text-slate-500">Checking access…</div>;
-  if (!allowed) return (
-    <div className="p-10 text-center">
-      <p className="text-red-400">Not authorized.</p>
-      <p className="text-slate-600 text-sm mt-1">This page is for the platform owner only.</p>
-    </div>
-  );
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Businesses</h1>
-          <p className="text-slate-500 text-sm">Platform super-admin</p>
+          <p className="text-slate-500 text-sm">Create and manage tenant businesses</p>
         </div>
         <button
           onClick={() => setShowAdd(p => !p)}
@@ -147,8 +119,9 @@ export default function SuperAdminPage() {
       </div>
 
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+      {notice && <p className="text-green-400 text-sm mb-4">{notice}</p>}
 
-      {/* ── Add business form ── */}
+      {/* ── Add business ── */}
       {showAdd && (
         <div className="cosmic-card p-5 mb-6">
           <h2 className="text-white font-semibold mb-4">New Business</h2>
@@ -200,7 +173,6 @@ export default function SuperAdminPage() {
           </div>
           <p className="text-slate-600 text-xs mb-3">
             Creates the owner login, business, settings and two default services (editable after).
-            Ask the owner to share their Google Calendar with the service account for calendar sync.
           </p>
           <button onClick={createBusiness} disabled={busy} className="btn-gold px-6">
             {busy ? "Creating…" : "Create Business"}
@@ -208,7 +180,7 @@ export default function SuperAdminPage() {
         </div>
       )}
 
-      {/* ── Business list ── */}
+      {/* ── List ── */}
       {loading ? (
         <div className="text-center text-slate-500 py-10">Loading…</div>
       ) : (
@@ -232,12 +204,15 @@ export default function SuperAdminPage() {
 
                 {isOpen && (
                   <div className="px-4 pb-4 border-t border-[#1e2140] pt-3 space-y-4">
-                    {/* actions */}
                     <div className="flex flex-wrap gap-2">
                       <a href={`/b/${b.slug}`} target="_blank"
                         className="flex items-center gap-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/30 px-3 py-1.5 rounded-lg hover:bg-purple-500/20 transition-all">
                         <ExternalLink size={13} /> Booking Page
                       </a>
+                      <button onClick={() => resetPassword(b)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-500/20 transition-all">
+                        <KeyRound size={13} /> Reset Owner Password
+                      </button>
                       <button onClick={() => toggleStatus(b)}
                         className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
                           b.status === "active"
@@ -281,7 +256,6 @@ export default function SuperAdminPage() {
                             onSave={(updated) => saveService(b, updated)}
                             onDelete={() => removeService(b, s)} />
                         ))}
-                        {/* add service */}
                         <div className="flex flex-wrap items-end gap-2 bg-[#0a0b1a] rounded-xl p-3">
                           <div className="flex-1 min-w-[100px]">
                             <label className="text-slate-600 text-[10px] block">key</label>
@@ -322,8 +296,8 @@ export default function SuperAdminPage() {
 }
 
 function ServiceRow({ svc, busy, onSave, onDelete }: {
-  svc: Svc; busy: boolean;
-  onSave: (s: Svc) => void; onDelete: () => void;
+  svc: SuperSvc; busy: boolean;
+  onSave: (s: SuperSvc) => void; onDelete: () => void;
 }) {
   const [s, setS] = useState(svc);
   return (

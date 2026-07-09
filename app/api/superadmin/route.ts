@@ -192,6 +192,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    // ── reset a business owner's password ────────────────────────────
+    if (action === "reset-owner-password") {
+      const { businessId, newPassword } = body;
+      if (!businessId || !newPassword || newPassword.length < 8) {
+        return NextResponse.json({ error: "businessId + newPassword (min 8) required" }, { status: 400 });
+      }
+      const { data: links } = await rest(`business_users?business_id=eq.${businessId}&select=user_id`);
+      const uid = links?.[0]?.user_id;
+      if (!uid) return NextResponse.json({ error: "no owner linked to this business" }, { status: 400 });
+      const r = await fetch(`${URL_}/auth/v1/admin/users/${uid}`, {
+        method: "PUT",
+        headers: svcHeaders,
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (!r.ok) return NextResponse.json({ error: await r.text() }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
     // ── delete a service ─────────────────────────────────────────────
     if (action === "delete-service") {
       const { serviceId } = body;

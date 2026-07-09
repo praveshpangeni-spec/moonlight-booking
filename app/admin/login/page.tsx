@@ -20,50 +20,47 @@ export default function AdminLogin() {
     if (error) {
       setError(error.message);
       setLoading(false);
-    } else {
-      router.push("/admin");
+      return;
     }
+    // Super admins go to the platform panel; business owners to their admin.
+    const { data: isSuper } = await supabase.rpc("is_super_admin");
+    router.push(isSuper ? "/super" : "/admin");
   };
 
   return (
-    <div className="min-h-screen bg-cosmic-gradient flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="text-6xl mb-3">🌙</div>
-          <h1 className="text-2xl font-bold text-white">Moonlight Admin</h1>
-          <p className="text-amber-400 text-sm mt-1">Astrology for Better Life</p>
+    <div className="min-h-screen bg-[#05060f] flex items-center justify-center px-4">
+      <div className="w-full max-w-xs">
+        <div className="text-center mb-10">
+          <div className="text-4xl mb-4">🌙</div>
+          <h1 className="text-lg font-semibold text-white tracking-wide">Sign in</h1>
         </div>
 
-        <form onSubmit={login} className="cosmic-card p-6 space-y-4">
-          <div>
-            <label className="block text-slate-400 text-sm mb-1.5">Email</label>
-            <input
-              className="input-cosmic"
-              type="email"
-              placeholder="your@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-slate-400 text-sm mb-1.5">Password</label>
-            <input
-              className="input-cosmic"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+        <form onSubmit={login} className="space-y-3">
+          <input
+            className="input-cosmic"
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            required
+          />
+          <input
+            className="input-cosmic"
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          {error && <p className="text-red-400 text-xs px-1">{error}</p>}
           <button type="submit" className="btn-gold w-full" disabled={loading}>
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <Loader2 size={16} className="animate-spin" /> Signing in...
+                <Loader2 size={15} className="animate-spin" /> Signing in
               </span>
-            ) : "Sign In"}
+            ) : "Continue"}
           </button>
         </form>
       </div>
