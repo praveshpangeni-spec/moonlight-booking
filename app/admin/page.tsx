@@ -21,7 +21,7 @@ interface Booking {
   amount: number;
   currency: string | null;
   service_type: string;
-  clients: { name: string; phone: string } | null;
+  clients: { name: string; phone: string; birth_date: string | null; birth_time: string | null; birth_place: string | null; current_location: string | null; gender: string | null } | null;
 }
 
 function addDays(dateStr: string, n: number): string {
@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const { biz, settings } = useBusiness();
   const bizAbbr = getTzAbbr(biz.timezone);
   const [weekBookings, setWeekBookings] = useState<Booking[]>([]);
+  const [detail, setDetail] = useState<Booking | null>(null);
   const [stats, setStats] = useState({ today: 0, pending: 0, unpaid: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +53,7 @@ export default function AdminDashboard() {
     const [{ data: week }, { data: pending }, { data: unpaid }] = await Promise.all([
       supabase
         .from("bookings")
-        .select("*, clients(name, phone)")
+        .select("*, clients(name, phone, birth_date, birth_time, birth_place, current_location, gender)")
         .eq("business_id", biz.id)
         .gte("date", today)
         .lte("date", weekEnd)
@@ -185,7 +186,7 @@ export default function AdminDashboard() {
                     {dayBookings.map((b) => {
                       const service = SERVICE_LABELS[b.service_type as keyof typeof SERVICE_LABELS];
                       return (
-                        <div key={b.id} className="flex items-center gap-2 px-3 py-3 hover:bg-white/2 transition-all">
+                        <div key={b.id} className="flex items-center gap-2 px-3 py-3 hover:bg-white/2 transition-all cursor-pointer" onClick={() => setDetail(b)}>
                           {/* Time */}
                           <div className="min-w-[80px] shrink-0 leading-tight">
                             <p className="text-white font-bold text-xs">{tzFmt12(b.start_time)} <span className="text-slate-500 font-normal">{bizAbbr}</span></p>
@@ -217,7 +218,7 @@ export default function AdminDashboard() {
                           {/* WhatsApp */}
                           {b.clients?.phone && (
                             <button
-                              onClick={() => wa(b)}
+                              onClick={(e) => { e.stopPropagation(); wa(b); }}
                               className="shrink-0 p-1.5 rounded-lg text-slate-500 hover:text-green-400 hover:bg-green-500/10 transition-all"
                               title="WhatsApp"
                             >
@@ -232,6 +233,40 @@ export default function AdminDashboard() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Booking detail modal */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-5"
+          style={{ background: "rgba(5,6,15,0.85)", backdropFilter: "blur(6px)" }}
+          onClick={() => setDetail(null)}>
+          <div className="cosmic-card p-5 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-bold">{detail.clients?.name || "Booking"}</h3>
+              <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="space-y-2 text-sm">
+              {([
+                ["Service", SERVICE_LABELS[detail.service_type as keyof typeof SERVICE_LABELS]?.en || detail.service_type],
+                ["Date", detail.date],
+                ["Time", `${tzFmt12(detail.start_time)} ${bizAbbr} · ${detail.duration_minutes} min`],
+                ["Phone", detail.clients?.phone],
+                ["Birth Date", detail.clients?.birth_date],
+                ["Birth Time", detail.clients?.birth_time ? tzFmt12(detail.clients.birth_time) : null],
+                ["Birth Place", detail.clients?.birth_place],
+                ["Location", detail.clients?.current_location],
+                ["Gender", detail.clients?.gender],
+                ["Amount", amtDisplay(detail)],
+                ["Status", `${detail.status} · ${detail.payment_status}`],
+              ] as [string, string | null | undefined][]).filter(([, v]) => v).map(([label, v]) => (
+                <div key={label} className="flex justify-between gap-3">
+                  <span className="text-slate-500">{label}</span>
+                  <span className="text-slate-200 text-right">{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

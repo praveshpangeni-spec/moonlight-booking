@@ -28,7 +28,7 @@ interface Booking {
   service_type: string;
   client_notes: string | null;
   admin_notes: string | null;
-  clients: { id: string; name: string; phone: string; birth_date: string | null; birth_time: string | null; birth_place: string } | null;
+  clients: { id: string; name: string; phone: string; birth_date: string | null; birth_time: string | null; birth_place: string; current_location: string | null; gender: string | null } | null;
 }
 
 const STATUS_TABS: { key: Status; label: string }[] = [
@@ -133,7 +133,7 @@ export default function BookingsPage() {
     setLoading(true);
     let q = supabase
       .from("bookings")
-      .select("*, clients(id, name, phone, birth_date, birth_time, birth_place)")
+      .select("*, clients(id, name, phone, birth_date, birth_time, birth_place, current_location, gender)")
       .eq("business_id", biz.id)
       .order("date", { ascending: false })
       .order("start_time");
@@ -755,6 +755,28 @@ export default function BookingsPage() {
                 {/* Expanded detail */}
                 {isOpen && (
                   <div className="px-4 pb-4 border-t border-[#1e2140] pt-3">
+                    {/* Client details */}
+                    {b.clients && !isEditing && (
+                      <div className="bg-[#0a0b1a] rounded-xl p-3 mb-3">
+                        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Client Details</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                          {([
+                            ["Name", b.clients.name],
+                            ["Phone", b.clients.phone],
+                            ["Birth Date", b.clients.birth_date],
+                            ["Birth Time", b.clients.birth_time ? fmt12(b.clients.birth_time) : null],
+                            ["Birth Place", b.clients.birth_place],
+                            ["Location", b.clients.current_location],
+                            ["Gender", b.clients.gender],
+                          ] as [string, string | null][]).filter(([, v]) => v).map(([label, v]) => (
+                            <div key={label} className="flex justify-between gap-3">
+                              <span className="text-slate-500">{label}</span>
+                              <span className="text-slate-200 text-right">{v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {b.client_notes && (
                       <div className="bg-[#0a0b1a] rounded-xl p-3 mb-3">
                         <p className="text-slate-500 text-xs mb-1">Client notes</p>
