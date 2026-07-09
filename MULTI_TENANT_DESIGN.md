@@ -247,3 +247,22 @@ Reuse the existing service-account integration with **no new OAuth work**:
     active services, settings).
   - Remaining: Phase 4 super-admin page, Phase 5 Stripe, then SWITCHOVER
     (deploy branch → verify /b/moonlight + admin live → onboard 2nd business).
+- **Phase 4 COMPLETE 2026-07-07** (branch `multi-tenant`, NOT deployed).
+  - DB: `super_admins` table (RLS enabled, no client policies — service-key
+    only) with Pravesh's uid; `is_super_admin()` RPC for UI gating.
+  - `SUPABASE_SERVICE_ROLE_KEY` added to Vercel (production) + `.env.local`.
+  - `app/api/superadmin/route.ts`: server route (service key), caller must be
+    in super_admins. Actions: list (businesses + settings + services + owner
+    email), create-business (creates owner auth login w/ email_confirm,
+    business, business_users link, settings, 2 default services),
+    set-status (activate/suspend), update-business, update-settings,
+    upsert-service, delete-service.
+  - `app/admin/super/page.tsx`: "Businesses" panel — add-business form
+    (name/slug/tz/currency/owner login/payment+calendar settings), per-business
+    expand → settings editor, services editor (inline edit/add/delete/active),
+    suspend/activate, link to /b/slug. Nav item shown only for super admin.
+  - Verified: service key reads super_admins, auth admin API reachable.
+  - Remaining: Phase 5 Stripe (later), SWITCHOVER checklist:
+    1) deploy `multi-tenant` branch, 2) Pravesh smoke-tests /b/moonlight
+    booking + admin tabs + /admin/super, 3) onboard 2nd business via the
+    panel, 4) merge branch → master.

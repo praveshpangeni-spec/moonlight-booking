@@ -6,7 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { BusinessProvider } from "@/lib/business";
 import {
-  LayoutDashboard, Calendar, Clock, Users, Wallet, LogOut, Menu, X,
+  LayoutDashboard, Calendar, Clock, Users, Wallet, LogOut, Menu, X, Building2,
 } from "lucide-react";
 
 const NAV = [
@@ -22,13 +22,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [checking, setChecking] = useState(true);
   const [open, setOpen] = useState(false);
+  const [isSuper, setIsSuper] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session && pathname !== "/admin/login") router.push("/admin/login");
       setChecking(false);
+      if (session) supabase.rpc("is_super_admin").then(({ data }) => setIsSuper(!!data));
     });
   }, []);
+
+  const nav = isSuper
+    ? [...NAV, { href: "/admin/super", label: "Businesses", icon: Building2 }]
+    : NAV;
 
   if (pathname === "/admin/login") return <>{children}</>;
   if (checking) return (
@@ -53,7 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <p className="text-amber-400 text-xs">Admin Panel</p>
         </div>
         <nav className="flex-1 p-3 space-y-1">
-          {NAV.map(({ href, label, icon: Icon }) => {
+          {nav.map(({ href, label, icon: Icon }) => {
             const active = pathname === href;
             return (
               <Link
@@ -97,7 +103,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="md:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setOpen(false)}>
           <div className="admin-drawer w-56 h-full bg-[#0d0f1f] border-r border-[#1e2140] px-4 pb-4" onClick={(e) => e.stopPropagation()}>
             <nav className="space-y-1">
-              {NAV.map(({ href, label, icon: Icon }) => {
+              {nav.map(({ href, label, icon: Icon }) => {
                 const active = pathname === href;
                 return (
                   <Link
