@@ -112,6 +112,9 @@ export default function SuperLayout({ children }: { children: React.ReactNode })
       {/* Main content */}
       <main className="admin-main flex-1 overflow-auto">
         {children}
+        <footer className="text-center text-slate-700 text-xs py-6">
+          Developed by Pravesh Pangeni
+        </footer>
       </main>
     </div>
   );

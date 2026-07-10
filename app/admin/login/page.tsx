@@ -65,6 +65,10 @@ export default function AdminLogin() {
             ) : "Continue"}
           </button>
         </form>
+
+        <p className="text-center text-slate-700 text-xs mt-10">
+          Developed by Pravesh Pangeni
+        </p>
       </div>
     </div>
   );
