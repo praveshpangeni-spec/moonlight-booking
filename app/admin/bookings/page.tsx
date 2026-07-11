@@ -925,7 +925,7 @@ export default function BookingsPage() {
 
                         {/* Utility: WhatsApp */}
                         {b.clients?.phone && (
-                          <a href={`https://wa.me/${toWaNumber(b.clients.phone)}?text=${encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time, { whatsappNumber: settings.whatsapp_number, template: settings.wa_template, storageTz: biz.timezone }))}`}
+                          <a href={`https://wa.me/${toWaNumber(b.clients.phone)}?text=${encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time, { whatsappNumber: settings.whatsapp_number, template: settings.wa_template, storageTz: biz.timezone, businessName: biz.name }))}`}
                             target="_blank"
                             className="flex items-center gap-1.5 text-xs font-semibold text-[#22c55e] bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg hover:bg-green-500/20 transition-all ml-auto">
                             <MessageCircle size={13} /> WhatsApp

@@ -82,6 +82,7 @@ export default function AdminDashboard() {
       whatsappNumber: settings.whatsapp_number,
       template: settings.wa_template,
       storageTz: biz.timezone,
+      businessName: biz.name,
     }));
     window.open(`https://wa.me/${toWaNumber(b.clients.phone)}?text=${msg}`, "_blank");
   };

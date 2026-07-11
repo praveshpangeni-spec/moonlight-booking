@@ -8,6 +8,7 @@ export interface WaOptions {
   whatsappNumber?: string | null; // business's WhatsApp number
   template?: string | null;       // custom template with {name} {date} {day} {time} {number}
   storageTz?: string | null;      // tz the booking date/time is stored in (business tz)
+  businessName?: string | null;   // used in the default template
 }
 
 const DAYS_NE = ["आइतबार", "सोमबार", "मंगलबार", "बुधबार", "बिहीबार", "शुक्रबार", "शनिबार"];
@@ -61,6 +62,7 @@ export function bookingWhatsappMessage(
   const dateEn = `${MONTHS_EN[mo - 1]} ${ordinal(d)}`;
   const timeNe = nepaliTime(time);
   const waNumber = opts.whatsappNumber || DEFAULT_WA;
+  const bizName = opts.businessName || "Astro Booking";
 
   if (opts.template) {
     return opts.template
@@ -71,5 +73,5 @@ export function bookingWhatsappMessage(
       .replaceAll("{number}", waNumber);
   }
 
-  return `नमस्ते ${firstName} ज्यु , Moonlight Astrology ✨🌙 मा विश्वास गर्नुभएकोमा तपाईंलाई धेरै-धेरै धन्यवाद। तपाईंको Appointment यही ${dateEn}, ${dayNe} (नेपाली समय अनुसार ${timeNe}) तय गरिएको छ। कृपया निर्धारित समयमा मलाई मेरो WhatsApp Number ${waNumber}  मा message गर्नुहोला🙏🏻तपाईंको धैर्यताको लागि धन्यवाद! 🙏🏻🌙 Moonlight Astrology — guidance to your soul’s path🙏🏻`;
+  return `नमस्ते ${firstName} ज्यु , ${bizName} ✨🌟 मा विश्वास गर्नुभएकोमा तपाईंलाई धेरै-धेरै धन्यवाद। तपाईंको Appointment यही ${dateEn}, ${dayNe} (नेपाली समय अनुसार ${timeNe}) तय गरिएको छ। कृपया निर्धारित समयमा मलाई मेरो WhatsApp Number ${waNumber}  मा message गर्नुहोला🙏🏻तपाईंको धैर्यताको लागि धन्यवाद! 🙏🏻🌟 ${bizName} — guidance to your soul’s path🙏🏻`;
 }

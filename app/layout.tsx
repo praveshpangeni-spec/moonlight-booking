@@ -3,12 +3,12 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 
 export const metadata: Metadata = {
-  title: "Moonlight Astrology — Book a Session",
-  description: "Book your personal astrology consultation with Moonlight Astrology. Astrology for Better Life.",
+  title: "Astro Booking",
+  description: "Book your astrology consultation online.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Moonlight",
+    title: "Astro Booking",
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
   },
   openGraph: {
-    title: "Moonlight Astrology — Book a Session",
-    description: "Get your personal astrology reading. Birth chart, career, love, compatibility and more.",
+    title: "Astro Booking",
+    description: "Book your astrology consultation online. Birth chart, compatibility and more.",
     type: "website",
   },
 };

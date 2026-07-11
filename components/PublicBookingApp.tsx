@@ -46,7 +46,7 @@ export default function PublicBookingApp() {
             <div />
             <LanguageToggle lang={lang} setLang={setLang} />
           </div>
-          <div className="text-5xl mb-2">🌙</div>
+          <div className="text-5xl mb-2">✨</div>
           <h1 className="text-2xl font-display font-bold text-white">{biz.name}</h1>
           <p className="text-amber-400 text-sm mt-1">
             {lang === "en" ? "Astrology for Better Life" : "राम्रो जीवनका लागि ज्योतिष"}

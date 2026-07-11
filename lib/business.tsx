@@ -90,7 +90,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-[#05060f] flex items-center justify-center p-6">
         <div className="cosmic-card p-8 text-center max-w-sm">
-          <div className="text-3xl mb-3">🌙</div>
+          <div className="text-3xl mb-3">✨</div>
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       </div>
@@ -100,7 +100,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
   if (!value) {
     return (
       <div className="min-h-screen bg-[#05060f] flex items-center justify-center">
-        <div className="text-4xl animate-spin">🌙</div>
+        <div className="text-4xl animate-spin">✨</div>
       </div>
     );
   }
@@ -110,7 +110,7 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen bg-[#05060f] flex items-center justify-center p-6">
         <div className="cosmic-card p-8 text-center max-w-sm">
-          <div className="text-3xl mb-3">🌙</div>
+          <div className="text-3xl mb-3">✨</div>
           <h2 className="text-white font-bold mb-2">Account Suspended</h2>
           <p className="text-slate-400 text-sm">
             {value.biz.name} is currently suspended. Please contact support to reactivate

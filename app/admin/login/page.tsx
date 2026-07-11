@@ -33,7 +33,7 @@ export default function AdminLogin() {
     <div className="min-h-screen bg-[#05060f] flex items-center justify-center px-4">
       <div className="w-full max-w-xs">
         <div className="text-center mb-10">
-          <div className="text-4xl mb-4">🌙</div>
+          <div className="text-4xl mb-4">✨</div>
           <h1 className="text-lg font-semibold text-white tracking-wide">Sign in</h1>
         </div>
 

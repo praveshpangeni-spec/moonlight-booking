@@ -37,7 +37,7 @@ export default function SuperLayout({ children }: { children: React.ReactNode })
 
   if (!ok) return (
     <div className="min-h-screen bg-[#05060f] flex items-center justify-center">
-      <div className="text-3xl animate-spin">🌙</div>
+      <div className="text-3xl animate-spin">✨</div>
     </div>
   );
 
@@ -46,7 +46,7 @@ export default function SuperLayout({ children }: { children: React.ReactNode })
       {/* Sidebar — desktop */}
       <aside className="hidden md:flex flex-col w-56 border-r border-[#1e2140] bg-[#0d0f1f] shrink-0">
         <div className="p-5 border-b border-[#1e2140]">
-          <div className="text-2xl mb-1">🌙</div>
+          <div className="text-2xl mb-1">✨</div>
           <p className="text-white font-bold text-sm">Platform</p>
           <p className="text-purple-400 text-xs">Super Admin</p>
         </div>
@@ -76,7 +76,7 @@ export default function SuperLayout({ children }: { children: React.ReactNode })
       {/* Mobile top bar */}
       <div className="pwa-safe-top md:hidden fixed top-0 left-0 right-0 z-50 bg-[#0d0f1f] border-b border-[#1e2140] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🌙</span>
+          <span className="text-xl">✨</span>
           <span className="text-white font-bold text-sm">Platform</span>
         </div>
         <button onClick={() => setOpen(!open)} className="text-slate-400">

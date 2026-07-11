@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (pathname === "/admin/login") return <>{children}</>;
   if (checking) return (
     <div className="min-h-screen bg-cosmic-gradient flex items-center justify-center">
-      <div className="text-4xl animate-spin">🌙</div>
+      <div className="text-4xl animate-spin">✨</div>
     </div>
   );
 
@@ -59,8 +59,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar — desktop */}
       <aside className="hidden md:flex flex-col w-56 border-r border-[#1e2140] bg-[#0d0f1f] shrink-0">
         <div className="p-5 border-b border-[#1e2140]">
-          <div className="text-2xl mb-1">🌙</div>
-          <p className="text-white font-bold text-sm">Moonlight</p>
+          <div className="text-2xl mb-1">✨</div>
+          <p className="text-white font-bold text-sm">Astro Booking</p>
           <p className="text-amber-400 text-xs">Admin Panel</p>
         </div>
         <nav className="flex-1 p-3 space-y-1">
@@ -95,7 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Mobile top bar */}
       <div className="pwa-safe-top md:hidden fixed top-0 left-0 right-0 z-50 bg-[#0d0f1f] border-b border-[#1e2140] px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xl">🌙</span>
+          <span className="text-xl">✨</span>
           <span className="text-white font-bold text-sm">Admin</span>
         </div>
         <button onClick={() => setOpen(!open)} className="text-slate-400">

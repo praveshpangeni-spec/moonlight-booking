@@ -57,8 +57,8 @@ export default function SuccessScreen({ booking, lang }: Props) {
       <div className="max-w-lg w-full text-center">
 
         {/* Icon */}
-        <div className="text-7xl mb-3 animate-bounce">🌙</div>
-        <div className="text-4xl mb-4">✨</div>
+        <div className="text-7xl mb-3 animate-bounce">✨</div>
+        <div className="text-4xl mb-4">🌟</div>
 
         {/* Title */}
         <h1 className="text-3xl font-bold text-white mb-3">{t.confirmed}</h1>

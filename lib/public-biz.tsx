@@ -50,7 +50,7 @@ export function PublicBizProvider({ slug, children }: { slug: string; children: 
     return (
       <div className="min-h-screen bg-cosmic-gradient flex items-center justify-center px-6">
         <div className="cosmic-card p-8 text-center max-w-sm">
-          <div className="text-4xl mb-3">🌙</div>
+          <div className="text-4xl mb-3">✨</div>
           <h2 className="text-white font-bold text-lg mb-2">Booking Unavailable</h2>
           <p className="text-slate-400 text-sm">
             This booking page doesn&apos;t exist or is currently offline.
@@ -63,7 +63,7 @@ export function PublicBizProvider({ slug, children }: { slug: string; children: 
   if (!value) {
     return (
       <div className="min-h-screen bg-cosmic-gradient flex items-center justify-center">
-        <div className="text-4xl animate-spin">🌙</div>
+        <div className="text-4xl animate-spin">✨</div>
       </div>
     );
   }

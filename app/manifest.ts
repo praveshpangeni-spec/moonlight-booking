@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Moonlight Admin",
-    short_name: "Moonlight",
-    description: "Moonlight Astrology admin — bookings, availability, clients and payments.",
+    name: "Astro Booking",
+    short_name: "Astro Booking",
+    description: "Astro Booking — bookings, availability, clients and payments.",
     start_url: "/admin",
     scope: "/", // includes /super so the platform panel stays full-screen in the PWA
     display: "standalone",
