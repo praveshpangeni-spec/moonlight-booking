@@ -26,6 +26,7 @@ export interface BusinessSettings {
   whatsapp_number: string | null;
   wa_template: string | null;
   google_calendar_id: string | null;
+  esewa_qr_url: string | null;
   intl_usd_amount: number | null;
   intl_npr_amount: number | null;
 }

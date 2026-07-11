@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { superCall, type SuperBiz, type SuperSvc } from "@/lib/super";
-import { Plus, ChevronDown, ChevronUp, Save, Trash2, Power, ExternalLink, KeyRound } from "lucide-react";
+import { superCall, type SuperBiz } from "@/lib/super";
+import { Plus, ChevronDown, ChevronUp, Save, Power, ExternalLink, KeyRound, Link2, MessageCircle, ClipboardCopy } from "lucide-react";
 
-// Create and manage businesses: settings, services, status, owner password.
+// Create businesses + owner logins, share their links, manage status.
+// Services and payment details are managed by each owner in their own
+// admin (Setup tab) — not here.
 
 const TZS = [
   { value: "Asia/Kathmandu", label: "Nepal (NPT)" },
@@ -25,9 +27,22 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const DEFAULT_NEW = {
   name: "", slug: "", timezone: "Asia/Kathmandu", currency: "NPR",
-  ownerEmail: "", ownerPassword: "",
-  whatsapp_number: "", esewa_id: "", paypal_link: "", google_calendar_id: "",
+  ownerEmail: "", ownerPassword: "", google_calendar_id: "",
 };
+
+function welcomeMessage(b: SuperBiz): string {
+  const origin = window.location.origin;
+  return `🪐 ${b.name} — Astro Booking
+
+Your customer booking page (share this with clients):
+${origin}/b/${b.slug}
+
+Your admin panel:
+${origin}/admin/login
+Login: ${b.owner_email}
+
+From the admin you can manage bookings, availability, and — in the Setup tab — your services, prices, eSewa number & QR, and PayPal link.`;
+}
 
 export default function SuperBusinessesPage() {
   const [businesses, setBusinesses] = useState<SuperBiz[]>([]);
@@ -39,8 +54,7 @@ export default function SuperBusinessesPage() {
 
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ ...DEFAULT_NEW });
-  const [settingsBuf, setSettingsBuf] = useState<Record<string, any>>({});
-  const [newSvc, setNewSvc] = useState({ key: "", name_en: "", duration_minutes: 60, price: 2500 });
+  const [calBuf, setCalBuf] = useState<Record<string, string>>({});
 
   const load = async () => {
     setLoading(true);
@@ -51,9 +65,9 @@ export default function SuperBusinessesPage() {
 
   useEffect(() => { load(); }, []);
 
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => Promise<unknown>, msg?: string) => {
     setError(""); setNotice(""); setBusy(true);
-    try { await fn(); await load(); }
+    try { await fn(); await load(); if (msg) setNotice(msg); }
     catch (e: any) { setError(e.message); }
     setBusy(false);
   };
@@ -62,17 +76,11 @@ export default function SuperBusinessesPage() {
     await superCall("create-business", {
       name: form.name, slug: form.slug, timezone: form.timezone, currency: form.currency,
       ownerEmail: form.ownerEmail, ownerPassword: form.ownerPassword,
-      settings: {
-        whatsapp_number: form.whatsapp_number || null,
-        esewa_id: form.esewa_id || null,
-        paypal_link: form.paypal_link || null,
-        google_calendar_id: form.google_calendar_id || null,
-      },
+      settings: { google_calendar_id: form.google_calendar_id || null },
     });
     setForm({ ...DEFAULT_NEW });
     setShowAdd(false);
-    setNotice("Business created.");
-  });
+  }, "Business created. Use Share to send them their links.");
 
   const toggleStatus = (b: SuperBiz) => {
     const to = b.status === "active" ? "suspended" : "active";
@@ -86,19 +94,23 @@ export default function SuperBusinessesPage() {
     if (pw.length < 8) { setError("Password must be at least 8 characters"); return; }
     run(async () => {
       await superCall("reset-owner-password", { businessId: b.id, newPassword: pw });
-      setNotice(`Password updated for ${b.owner_email}.`);
-    });
+    }, `Password updated for ${b.owner_email}.`);
   };
 
-  const saveSettings = (b: SuperBiz) => run(() => superCall("update-settings", { businessId: b.id, settings: settingsBuf[b.id] || {} }));
-  const saveService = (b: SuperBiz, s: SuperSvc) => run(() => superCall("upsert-service", { businessId: b.id, service: s }));
-  const addService = (b: SuperBiz) => run(async () => {
-    await superCall("upsert-service", { businessId: b.id, service: newSvc });
-    setNewSvc({ key: "", name_en: "", duration_minutes: 60, price: 2500 });
-  });
-  const removeService = (b: SuperBiz, s: SuperSvc) => {
-    if (!confirm(`Delete service "${s.name_en}"?`)) return;
-    run(() => superCall("delete-service", { serviceId: s.id }));
+  const saveCalendar = (b: SuperBiz) => run(
+    () => superCall("update-settings", { businessId: b.id, settings: { google_calendar_id: calBuf[b.id] ?? "" } }),
+    "Calendar ID saved.",
+  );
+
+  // ── sharing ────────────────────────────────────────────────────────
+  const copy = async (text: string, what: string) => {
+    setError(""); setNotice("");
+    try { await navigator.clipboard.writeText(text); setNotice(`${what} copied to clipboard.`); }
+    catch { setError("Could not copy — long-press to copy manually."); }
+  };
+
+  const shareWhatsApp = (b: SuperBiz) => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(welcomeMessage(b))}`, "_blank");
   };
 
   return (
@@ -106,7 +118,7 @@ export default function SuperBusinessesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Businesses</h1>
-          <p className="text-slate-500 text-sm">Create and manage tenant businesses</p>
+          <p className="text-slate-500 text-sm">Owners manage their own services & payments in their admin&apos;s Setup tab</p>
         </div>
         <button
           onClick={() => setShowAdd(p => !p)}
@@ -154,25 +166,14 @@ export default function SuperBusinessesPage() {
               <input className={inputCls} type="text" value={form.ownerPassword}
                 onChange={e => setForm(f => ({ ...f, ownerPassword: e.target.value }))} />
             </Field>
-            <Field label="WhatsApp Number">
-              <input className={inputCls} placeholder="+977…" value={form.whatsapp_number}
-                onChange={e => setForm(f => ({ ...f, whatsapp_number: e.target.value }))} />
-            </Field>
-            <Field label="eSewa ID">
-              <input className={inputCls} value={form.esewa_id}
-                onChange={e => setForm(f => ({ ...f, esewa_id: e.target.value }))} />
-            </Field>
-            <Field label="PayPal Link">
-              <input className={inputCls} value={form.paypal_link}
-                onChange={e => setForm(f => ({ ...f, paypal_link: e.target.value }))} />
-            </Field>
-            <Field label="Google Calendar ID (shared with service account)">
+            <Field label="Google Calendar ID (optional)">
               <input className={inputCls} placeholder="their-gmail@gmail.com" value={form.google_calendar_id}
                 onChange={e => setForm(f => ({ ...f, google_calendar_id: e.target.value }))} />
             </Field>
           </div>
           <p className="text-slate-600 text-xs mb-3">
-            Creates the owner login, business, settings and two default services (editable after).
+            Creates the owner login + two starter services. The owner sets their own
+            services, prices, eSewa/PayPal and QR in their admin&apos;s Setup tab.
           </p>
           <button onClick={createBusiness} disabled={busy} className="btn-gold px-6">
             {busy ? "Creating…" : "Create Business"}
@@ -187,11 +188,10 @@ export default function SuperBusinessesPage() {
         <div className="space-y-3">
           {businesses.map(b => {
             const isOpen = expanded === b.id;
-            const st = settingsBuf[b.id] ?? b.settings ?? {};
             return (
               <div key={b.id} className="cosmic-card overflow-hidden">
                 <button className="w-full p-4 text-left flex items-center gap-3 hover:bg-white/2 transition-all"
-                  onClick={() => { setExpanded(isOpen ? null : b.id); setSettingsBuf(p => ({ ...p, [b.id]: { ...(b.settings || {}) } })); }}>
+                  onClick={() => { setExpanded(isOpen ? null : b.id); setCalBuf(p => ({ ...p, [b.id]: b.settings?.google_calendar_id || "" })); }}>
                   <div className="flex-1 min-w-0">
                     <p className="text-white font-semibold">{b.name}</p>
                     <p className="text-slate-500 text-xs">/b/{b.slug} · {b.timezone} · {b.owner_email || "no owner"}</p>
@@ -204,84 +204,61 @@ export default function SuperBusinessesPage() {
 
                 {isOpen && (
                   <div className="px-4 pb-4 border-t border-[#1e2140] pt-3 space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                      <a href={`/b/${b.slug}`} target="_blank"
-                        className="flex items-center gap-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/30 px-3 py-1.5 rounded-lg hover:bg-purple-500/20 transition-all">
-                        <ExternalLink size={13} /> Booking Page
-                      </a>
-                      <button onClick={() => resetPassword(b)}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-500/20 transition-all">
-                        <KeyRound size={13} /> Reset Owner Password
-                      </button>
-                      <button onClick={() => toggleStatus(b)}
-                        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
-                          b.status === "active"
-                            ? "text-red-400 bg-red-500/10 border-red-500/30 hover:bg-red-500/20"
-                            : "text-green-400 bg-green-500/10 border-green-500/30 hover:bg-green-500/20"
-                        }`}>
-                        <Power size={13} /> {b.status === "active" ? "Suspend" : "Activate"}
-                      </button>
-                    </div>
-
-                    {/* settings */}
+                    {/* ── Share with the owner ── */}
                     <div>
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Settings</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {[
-                          ["whatsapp_number", "WhatsApp Number"],
-                          ["esewa_id", "eSewa ID"],
-                          ["paypal_link", "PayPal Link"],
-                          ["google_calendar_id", "Google Calendar ID"],
-                          ["intl_usd_amount", "Intl USD Amount"],
-                          ["intl_npr_amount", "Intl NPR Amount"],
-                        ].map(([k, label]) => (
-                          <Field key={k} label={label}>
-                            <input className={inputCls} value={st[k] ?? ""}
-                              onChange={e => setSettingsBuf(p => ({ ...p, [b.id]: { ...st, [k]: e.target.value } }))} />
-                          </Field>
-                        ))}
+                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Share</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button onClick={() => shareWhatsApp(b)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-[#22c55e] bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg hover:bg-green-500/20 transition-all">
+                          <MessageCircle size={13} /> Share via WhatsApp
+                        </button>
+                        <button onClick={() => copy(welcomeMessage(b), "Welcome message")}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/30 px-3 py-1.5 rounded-lg hover:bg-purple-500/20 transition-all">
+                          <ClipboardCopy size={13} /> Copy Welcome Message
+                        </button>
+                        <button onClick={() => copy(`${window.location.origin}/b/${b.slug}`, "Booking link")}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-500/20 transition-all">
+                          <Link2 size={13} /> Copy Booking Link
+                        </button>
+                        <button onClick={() => copy(`${window.location.origin}/admin/login`, "Admin link")}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 bg-white/5 border border-[#1e2140] px-3 py-1.5 rounded-lg hover:bg-white/10 transition-all">
+                          <Link2 size={13} /> Copy Admin Link
+                        </button>
+                        <a href={`/b/${b.slug}`} target="_blank"
+                          className="flex items-center gap-1.5 text-xs font-semibold text-slate-300 bg-white/5 border border-[#1e2140] px-3 py-1.5 rounded-lg hover:bg-white/10 transition-all">
+                          <ExternalLink size={13} /> Open Booking Page
+                        </a>
                       </div>
-                      <button onClick={() => saveSettings(b)} disabled={busy}
-                        className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/30 px-3 py-1.5 rounded-lg hover:bg-purple-500/20 transition-all">
-                        <Save size={13} /> Save Settings
-                      </button>
                     </div>
 
-                    {/* services */}
+                    {/* ── Manage ── */}
                     <div>
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Services</p>
-                      <div className="space-y-2">
-                        {b.services.map(s => (
-                          <ServiceRow key={s.id} svc={s} busy={busy}
-                            onSave={(updated) => saveService(b, updated)}
-                            onDelete={() => removeService(b, s)} />
-                        ))}
-                        <div className="flex flex-wrap items-end gap-2 bg-[#0a0b1a] rounded-xl p-3">
-                          <div className="flex-1 min-w-[100px]">
-                            <label className="text-slate-600 text-[10px] block">key</label>
-                            <input className={inputCls} placeholder="e.g. tarot" value={newSvc.key}
-                              onChange={e => setNewSvc(v => ({ ...v, key: e.target.value }))} />
-                          </div>
-                          <div className="flex-1 min-w-[140px]">
-                            <label className="text-slate-600 text-[10px] block">name</label>
-                            <input className={inputCls} placeholder="Service name" value={newSvc.name_en}
-                              onChange={e => setNewSvc(v => ({ ...v, name_en: e.target.value }))} />
-                          </div>
-                          <div className="w-20">
-                            <label className="text-slate-600 text-[10px] block">min</label>
-                            <input className={inputCls} type="number" value={newSvc.duration_minutes}
-                              onChange={e => setNewSvc(v => ({ ...v, duration_minutes: parseInt(e.target.value) || 60 }))} />
-                          </div>
-                          <div className="w-24">
-                            <label className="text-slate-600 text-[10px] block">price</label>
-                            <input className={inputCls} type="number" value={newSvc.price}
-                              onChange={e => setNewSvc(v => ({ ...v, price: parseInt(e.target.value) || 0 }))} />
-                          </div>
-                          <button onClick={() => addService(b)} disabled={busy || !newSvc.key || !newSvc.name_en}
-                            className="text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-2 rounded-lg hover:bg-amber-500/20 transition-all disabled:opacity-40">
-                            <Plus size={13} />
-                          </button>
+                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">Manage</p>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        <button onClick={() => resetPassword(b)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-lg hover:bg-amber-500/20 transition-all">
+                          <KeyRound size={13} /> Reset Owner Password
+                        </button>
+                        <button onClick={() => toggleStatus(b)}
+                          className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${
+                            b.status === "active"
+                              ? "text-red-400 bg-red-500/10 border-red-500/30 hover:bg-red-500/20"
+                              : "text-green-400 bg-green-500/10 border-green-500/30 hover:bg-green-500/20"
+                          }`}>
+                          <Power size={13} /> {b.status === "active" ? "Suspend" : "Activate"}
+                        </button>
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <Field label="Google Calendar ID (shared with the platform service account)">
+                            <input className={inputCls} placeholder="their-gmail@gmail.com" value={calBuf[b.id] ?? ""}
+                              onChange={e => setCalBuf(p => ({ ...p, [b.id]: e.target.value }))} />
+                          </Field>
                         </div>
+                        <button onClick={() => saveCalendar(b)} disabled={busy}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-purple-300 bg-purple-500/10 border border-purple-500/30 px-3 py-2 rounded-lg hover:bg-purple-500/20 transition-all">
+                          <Save size={13} /> Save
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -291,37 +268,6 @@ export default function SuperBusinessesPage() {
           })}
         </div>
       )}
-    </div>
-  );
-}
-
-function ServiceRow({ svc, busy, onSave, onDelete }: {
-  svc: SuperSvc; busy: boolean;
-  onSave: (s: SuperSvc) => void; onDelete: () => void;
-}) {
-  const [s, setS] = useState(svc);
-  return (
-    <div className="flex flex-wrap items-center gap-2 bg-[#0a0b1a] rounded-xl p-3">
-      <span className="text-slate-600 text-xs w-24 truncate shrink-0">{s.key}</span>
-      <input className={`${inputCls} flex-1 min-w-[140px]`} value={s.name_en}
-        onChange={e => setS(v => ({ ...v, name_en: e.target.value }))} />
-      <input className={`${inputCls} w-20`} type="number" value={s.duration_minutes}
-        onChange={e => setS(v => ({ ...v, duration_minutes: parseInt(e.target.value) || 60 }))} />
-      <input className={`${inputCls} w-24`} type="number" value={s.price}
-        onChange={e => setS(v => ({ ...v, price: parseInt(e.target.value) || 0 }))} />
-      <label className="flex items-center gap-1 text-xs text-slate-400">
-        <input type="checkbox" checked={s.active}
-          onChange={e => setS(v => ({ ...v, active: e.target.checked }))} />
-        active
-      </label>
-      <button onClick={() => onSave(s)} disabled={busy}
-        className="p-1.5 rounded-lg text-purple-400 hover:bg-purple-500/10 transition-all" title="Save">
-        <Save size={14} />
-      </button>
-      <button onClick={onDelete} disabled={busy}
-        className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
-        <Trash2 size={14} />
-      </button>
     </div>
   );
 }

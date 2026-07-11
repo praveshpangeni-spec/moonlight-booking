@@ -6,7 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { BusinessProvider } from "@/lib/business";
 import {
-  LayoutDashboard, Calendar, Clock, Users, Wallet, LogOut, Menu, X, BadgeCheck,
+  LayoutDashboard, Calendar, Clock, Users, Wallet, LogOut, Menu, X, BadgeCheck, Settings,
 } from "lucide-react";
 
 const NAV = [
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/admin/availability", label: "Availability", icon: Clock },
   { href: "/admin/clients", label: "Clients", icon: Users },
   { href: "/admin/payments", label: "Payments", icon: Wallet },
+  { href: "/admin/setup", label: "Setup", icon: Settings },
   { href: "/admin/subscription", label: "Subscription", icon: BadgeCheck },
 ];
 

@@ -8,7 +8,6 @@ import { supabase } from "@/lib/supabase";
 import { SERVICE_LABELS } from "@/lib/database.types";
 import { addToCalendar } from "@/lib/calendar";
 import toast from "react-hot-toast";
-import Image from "next/image";
 import type { BookingData, Lang } from "@/lib/booking-types";
 import { usePublicBiz } from "@/lib/public-biz";
 
@@ -261,10 +260,11 @@ export default function PaymentStep({ booking, back, lang, onSuccess }: Props) {
             /* ── eSewa ── */
             <>
               <p className="text-slate-300 text-sm text-center mb-4">{t.scanQr}</p>
-              {biz.slug === "moonlight" && (
+              {settings.esewa_qr_url && (
                 <div className="flex justify-center mb-4">
                   <div className="bg-white rounded-2xl p-3">
-                    <Image src="/Esewa.jpeg" alt="eSewa QR Code" width={200} height={200} className="rounded-xl" />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={settings.esewa_qr_url} alt="eSewa QR Code" width={200} height={200} className="rounded-xl" />
                   </div>
                 </div>
               )}
