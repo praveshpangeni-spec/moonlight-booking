@@ -513,8 +513,8 @@ export default function BookingsPage() {
                   <option value="NPR">NPR</option>
                   <option value="USD">USD</option>
                 </select>
-                <input className={inputCls} type="number" value={addForm.amount}
-                  onChange={e => setAddForm(f => ({ ...f, amount: parseInt(e.target.value) || 0 }))} />
+                <input className={inputCls} type="text" inputMode="numeric" value={addForm.amount}
+                  onChange={e => setAddForm(f => ({ ...f, amount: parseInt(e.target.value.replace(/\D/g, ""), 10) || 0 }))} />
               </div>
             </LabelRow>
             <LabelRow label="Date *">
@@ -833,9 +833,10 @@ export default function BookingsPage() {
                             <input className={inputCls} type="number"
                               value={editForm.duration} onChange={e => setEditForm(f => ({ ...f, duration: e.target.value }))} />
                           </LabelRow>
-                          <LabelRow label="Amount (NPR)">
-                            <input className={inputCls} type="number"
-                              value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} />
+                          <LabelRow label="Amount">
+                            <input className={inputCls} type="text" inputMode="numeric"
+                              value={editForm.amount}
+                              onChange={e => setEditForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "") }))} />
                           </LabelRow>
                           <LabelRow label="Status">
                             <select className={selectCls} style={{ colorScheme: "dark" }}
