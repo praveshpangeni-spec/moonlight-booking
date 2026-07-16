@@ -124,7 +124,7 @@ export default function BookingsPage() {
   // Edit booking
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
-    date: "", startTime: "", duration: "", status: "", paymentMethod: "", paymentStatus: "", amount: "", adminNotes: "",
+    date: "", startTime: "", duration: "", status: "", paymentMethod: "", paymentStatus: "", amount: "", currency: "NPR", adminNotes: "",
     clientName: "", clientPhone: "", clientBirthDate: "", clientBirthTime: "", clientBirthPlace: "",
   });
   const [editSaving, setEditSaving] = useState(false);
@@ -330,6 +330,7 @@ export default function BookingsPage() {
       paymentMethod:    b.payment_method || "esewa",
       paymentStatus:    b.payment_status,
       amount:           String(b.amount),
+      currency:         b.currency || "NPR",
       adminNotes:       b.admin_notes || "",
       clientName:       b.clients?.name || "",
       clientPhone:      b.clients?.phone || "",
@@ -362,6 +363,7 @@ export default function BookingsPage() {
       payment_method:   editForm.paymentMethod as any,
       payment_status:   editForm.paymentStatus as any,
       amount:           parseInt(editForm.amount) || 0,
+      currency:         editForm.currency,
       admin_notes:      editForm.adminNotes.trim() || null,
     }).eq("id", b.id);
 
@@ -834,9 +836,17 @@ export default function BookingsPage() {
                               value={editForm.duration} onChange={e => setEditForm(f => ({ ...f, duration: e.target.value }))} />
                           </LabelRow>
                           <LabelRow label="Amount">
-                            <input className={inputCls} type="text" inputMode="numeric"
-                              value={editForm.amount}
-                              onChange={e => setEditForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "") }))} />
+                            <div className="flex gap-2">
+                              <select className={`${selectCls} shrink-0`} style={{ colorScheme: "dark", width: "84px" }}
+                                value={editForm.currency}
+                                onChange={e => setEditForm(f => ({ ...f, currency: e.target.value }))}>
+                                <option value="NPR">NPR</option>
+                                <option value="USD">USD</option>
+                              </select>
+                              <input className={inputCls} type="text" inputMode="numeric"
+                                value={editForm.amount}
+                                onChange={e => setEditForm(f => ({ ...f, amount: e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "") }))} />
+                            </div>
                           </LabelRow>
                           <LabelRow label="Status">
                             <select className={selectCls} style={{ colorScheme: "dark" }}
