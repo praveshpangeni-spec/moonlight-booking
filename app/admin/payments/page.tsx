@@ -14,6 +14,7 @@ interface Payment {
   date: string;
   start_time: string;
   amount: number;
+  currency: string | null;
   service_type: string;
   payment_status: string;
   payment_method: string | null;
@@ -68,7 +69,7 @@ export default function PaymentsPage() {
     setLoading(true);
     let q = supabase
       .from("bookings")
-      .select("id, date, start_time, amount, service_type, payment_status, payment_method, payment_reference, status, clients(name, phone)")
+      .select("id, date, start_time, amount, currency, service_type, payment_status, payment_method, payment_reference, status, clients(name, phone)")
       .eq("business_id", biz.id)
       .neq("status", "cancelled")
       .order("date", { ascending: false })
@@ -100,10 +101,22 @@ export default function PaymentsPage() {
     p.clients?.phone.includes(search)
   );
 
-  const totalRevenue = filtered.filter(p => p.payment_status === "paid").reduce((s, p) => s + p.amount, 0);
-  const unpaidRevenue = filtered.filter(p => p.payment_status === "unpaid").reduce((s, p) => s + p.amount, 0);
-  const paidCount = filtered.filter(p => p.payment_status === "paid").length;
-  const unpaidCount = filtered.filter(p => p.payment_status === "unpaid").length;
+  // Never mix currencies: separate NPR and USD totals
+  const sumBy = (list: Payment[]) => list.reduce(
+    (acc, p) => {
+      const cur = p.currency === "USD" ? "USD" : "NPR";
+      acc[cur] += Number(p.amount) || 0;
+      return acc;
+    },
+    { NPR: 0, USD: 0 } as Record<"NPR" | "USD", number>,
+  );
+  const paidList   = filtered.filter(p => p.payment_status === "paid");
+  const unpaidList = filtered.filter(p => p.payment_status === "unpaid");
+  const collected  = sumBy(paidList);
+  const pending    = sumBy(unpaidList);
+  const hasUsd     = collected.USD > 0 || pending.USD > 0;
+  const paidCount = paidList.length;
+  const unpaidCount = unpaidList.length;
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -128,17 +141,20 @@ export default function PaymentsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div className="cosmic-card p-4 border-l-2 border-l-green-500">
           <p className="text-slate-500 text-xs mb-1">Collected</p>
-          <p className="text-green-400 text-2xl font-bold">NPR {totalRevenue.toLocaleString()}</p>
+          <p className="text-green-400 text-xl font-bold">NPR {collected.NPR.toLocaleString()}</p>
+          {hasUsd && <p className="text-green-400 text-xl font-bold">USD ${collected.USD.toLocaleString()}</p>}
           <p className="text-slate-600 text-xs mt-0.5">{paidCount} session{paidCount !== 1 ? "s" : ""}</p>
         </div>
         <div className="cosmic-card p-4 border-l-2 border-l-red-500">
           <p className="text-slate-500 text-xs mb-1">Pending</p>
-          <p className="text-red-400 text-2xl font-bold">NPR {unpaidRevenue.toLocaleString()}</p>
+          <p className="text-red-400 text-xl font-bold">NPR {pending.NPR.toLocaleString()}</p>
+          {hasUsd && <p className="text-red-400 text-xl font-bold">USD ${pending.USD.toLocaleString()}</p>}
           <p className="text-slate-600 text-xs mt-0.5">{unpaidCount} session{unpaidCount !== 1 ? "s" : ""}</p>
         </div>
         <div className="cosmic-card p-4 border-l-2 border-l-amber-500">
           <p className="text-slate-500 text-xs mb-1">Total Expected</p>
-          <p className="text-amber-400 text-2xl font-bold">NPR {(totalRevenue + unpaidRevenue).toLocaleString()}</p>
+          <p className="text-amber-400 text-xl font-bold">NPR {(collected.NPR + pending.NPR).toLocaleString()}</p>
+          {hasUsd && <p className="text-amber-400 text-xl font-bold">USD ${(collected.USD + pending.USD).toLocaleString()}</p>}
           <p className="text-slate-600 text-xs mt-0.5">{filtered.length} total</p>
         </div>
         <div className="cosmic-card p-4 border-l-2 border-l-purple-500">
@@ -194,7 +210,7 @@ export default function PaymentsPage() {
                 {/* Amount + action */}
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <p className="text-amber-400 font-bold text-sm">NPR {p.amount.toLocaleString()}</p>
+                    <p className="text-amber-400 font-bold text-sm">{p.currency === "USD" ? `$${p.amount.toLocaleString()}` : `NPR ${p.amount.toLocaleString()}`}</p>
                     <span className={`text-xs font-medium ${isPaid ? "text-green-400" : "text-red-400"}`}>
                       {isPaid ? "paid" : "unpaid"}
                     </span>
