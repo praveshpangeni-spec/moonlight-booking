@@ -9,6 +9,10 @@ export interface WaOptions {
   template?: string | null;       // custom template with {name} {date} {day} {time} {number}
   storageTz?: string | null;      // tz the booking date/time is stored in (business tz)
   businessName?: string | null;   // used in the default template
+  birthDate?: string | null;      // client's DOB (AD yyyy-MM-dd) — appended for confirmation
+  birthDateBs?: string | null;    // DOB in BS
+  birthTime?: string | null;
+  birthPlace?: string | null;
 }
 
 const DAYS_NE = ["आइतबार", "सोमबार", "मंगलबार", "बुधबार", "बिहीबार", "शुक्रबार", "शनिबार"];
@@ -64,14 +68,23 @@ export function bookingWhatsappMessage(
   const waNumber = opts.whatsappNumber || DEFAULT_WA;
   const bizName = opts.businessName || "Astro Booking";
 
+  // Birth-detail confirmation block (appended to either template)
+  const birthLines: string[] = [];
+  if (opts.birthDate) birthLines.push(`जन्म मिति: ${opts.birthDate}${opts.birthDateBs ? ` (${opts.birthDateBs})` : ""}`);
+  if (opts.birthTime) birthLines.push(`जन्म समय: ${opts.birthTime}`);
+  if (opts.birthPlace) birthLines.push(`जन्म स्थान: ${opts.birthPlace}`);
+  const birthBlock = birthLines.length
+    ? `\n\nतपाईंको जन्म विवरण (कृपया पुष्टि गर्नुहोस्):\n${birthLines.join("\n")}`
+    : "";
+
   if (opts.template) {
     return opts.template
       .replaceAll("{name}", firstName)
       .replaceAll("{date}", dateEn)
       .replaceAll("{day}", dayNe)
       .replaceAll("{time}", timeNe)
-      .replaceAll("{number}", waNumber);
+      .replaceAll("{number}", waNumber) + birthBlock;
   }
 
-  return `नमस्ते ${firstName} ज्यु , ${bizName} ✨🌟 मा विश्वास गर्नुभएकोमा तपाईंलाई धेरै-धेरै धन्यवाद। तपाईंको Appointment यही ${dateEn}, ${dayNe} (नेपाली समय अनुसार ${timeNe}) तय गरिएको छ। कृपया निर्धारित समयमा मलाई मेरो WhatsApp Number ${waNumber}  मा message गर्नुहोला🙏🏻तपाईंको धैर्यताको लागि धन्यवाद! 🙏🏻🌟 ${bizName} — guidance to your soul’s path🙏🏻`;
+  return `नमस्ते ${firstName} ज्यु , ${bizName} ✨🌟 मा विश्वास गर्नुभएकोमा तपाईंलाई धेरै-धेरै धन्यवाद। तपाईंको Appointment यही ${dateEn}, ${dayNe} (नेपाली समय अनुसार ${timeNe}) तय गरिएको छ। कृपया निर्धारित समयमा मलाई मेरो WhatsApp Number ${waNumber}  मा message गर्नुहोला🙏🏻तपाईंको धैर्यताको लागि धन्यवाद! 🙏🏻🌟 ${bizName} — guidance to your soul’s path🙏🏻${birthBlock}`;
 }

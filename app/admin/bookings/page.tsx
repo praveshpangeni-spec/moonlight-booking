@@ -11,6 +11,7 @@ import { useBusiness } from "@/lib/business";
 import BirthDatePicker from "@/components/BirthDatePicker";
 import { addToCalendar, markCalendarPaid, deleteCalendarEvent, updateCalendarEvent } from "@/lib/calendar";
 import { bookingWhatsappMessage } from "@/lib/whatsapp";
+import { adToBs } from "@/lib/nepali-date";
 
 type Status = "all" | "pending" | "confirmed" | "completed" | "cancelled";
 
@@ -936,7 +937,7 @@ export default function BookingsPage() {
 
                         {/* Utility: WhatsApp */}
                         {b.clients?.phone && (
-                          <a href={`https://wa.me/${toWaNumber(b.clients.phone)}?text=${encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time, { whatsappNumber: settings.whatsapp_number, template: settings.wa_template, storageTz: biz.timezone, businessName: biz.name }))}`}
+                          <a href={`https://wa.me/${toWaNumber(b.clients.phone)}?text=${encodeURIComponent(bookingWhatsappMessage(b.clients.name, b.date, b.start_time, { whatsappNumber: settings.whatsapp_number, template: settings.wa_template, storageTz: biz.timezone, businessName: biz.name, birthDate: b.clients.birth_date, birthDateBs: b.clients.birth_date ? adToBs(b.clients.birth_date) : null, birthTime: b.clients.birth_time, birthPlace: b.clients.birth_place }))}`}
                             target="_blank"
                             className="flex items-center gap-1.5 text-xs font-semibold text-[#22c55e] bg-green-500/10 border border-green-500/30 px-3 py-1.5 rounded-lg hover:bg-green-500/20 transition-all ml-auto">
                             <MessageCircle size={13} /> WhatsApp

@@ -9,6 +9,7 @@ import { toWaNumber } from "@/lib/countries";
 import { bookingWhatsappMessage } from "@/lib/whatsapp";
 import { todayIn, fmt12 as tzFmt12, tzToTz, getTzAbbr } from "@/lib/timezone";
 import { useBusiness } from "@/lib/business";
+import { adToBs } from "@/lib/nepali-date";
 
 interface Booking {
   id: string;
@@ -83,6 +84,10 @@ export default function AdminDashboard() {
       template: settings.wa_template,
       storageTz: biz.timezone,
       businessName: biz.name,
+      birthDate: b.clients.birth_date,
+      birthDateBs: b.clients.birth_date ? adToBs(b.clients.birth_date) : null,
+      birthTime: b.clients.birth_time,
+      birthPlace: b.clients.birth_place,
     }));
     window.open(`https://wa.me/${toWaNumber(b.clients.phone)}?text=${msg}`, "_blank");
   };
@@ -254,6 +259,7 @@ export default function AdminDashboard() {
                 ["Time", `${tzFmt12(detail.start_time)} ${bizAbbr} · ${detail.duration_minutes} min`],
                 ["Phone", detail.clients?.phone],
                 ["Birth Date", detail.clients?.birth_date],
+                ["Birth Date (BS)", detail.clients?.birth_date ? adToBs(detail.clients.birth_date) : null],
                 ["Birth Time", detail.clients?.birth_time ? tzFmt12(detail.clients.birth_time) : null],
                 ["Birth Place", detail.clients?.birth_place],
                 ["Location", detail.clients?.current_location],
